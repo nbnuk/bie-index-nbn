@@ -1,0 +1,8 @@
+rootProject.name='bie-index-nbn'
+
+boolean inplace = false
+
+if (inplace) {
+    include ':bie-index'
+    project(':bie-index').projectDir = new File(settingsDir,'../bie-index')
+}
