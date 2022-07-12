@@ -1,4 +1,4 @@
-package uk.org.nbn.bie.places
+package uk.org.nbn.bie
 
 import au.org.ala.bie.search.AutoCompleteDTO
 import au.org.ala.bie.util.Encoder
