@@ -1,11 +1,9 @@
-package uk.org.nbn.bie.places
+package uk.org.nbn.bie
 
 import au.com.bytecode.opencsv.CSVReader
 import au.org.ala.bie.search.IndexDocType
 import au.org.ala.bie.util.Encoder
-import grails.transaction.Transactional
 import groovy.json.JsonSlurper
-
 import java.util.zip.GZIPInputStream
 
 class ImportService extends au.org.ala.bie.ImportService{
@@ -28,7 +26,13 @@ class ImportService extends au.org.ala.bie.ImportService{
         log "Finished featured regions import"
     }
 
-    @Override
+
+
+
+
+
+
+        @Override
     protected def importLayer(layer) {
         if (!layer.enabled.toBoolean()) {
             return false;
@@ -142,5 +146,150 @@ class ImportService extends au.org.ala.bie.ImportService{
             }
         }
         return featuredDynamicFields;
+    }
+
+
+    //This is legacy (pre FFTF) importOccurrenceData. It was customised for BBG. Before FFTF, BBG stopped
+    //requiring this method. If they want it back again, then either uncomment this out (may need a little
+    //work and retrieval of the method clearFieldValues obtained from the legacy fork) or reimplement using the new
+    //ALA version as an example
+    def importOccurrenceDataForPlaces(Boolean online = false, Boolean forRegionFeatured = true) throws Exception {
+        throw new UnsupportedOperationException()
+//        String nationalSpeciesDatasets = grailsApplication.config.nationalSpeciesDatasets // comma separated String
+//        def pageSize = 10000
+//        def paramsMap = [
+//                q         : "taxonomicStatus:accepted", // "taxonomicStatus:accepted",
+//                //fq: "datasetID:dr2699", // testing only with AFD
+//                cursorMark: "*", // gets updated by subsequent searches
+//                fl        : "id,idxtype,guid,scientificName,datasetID", // will restrict results to docs with these fields (bit like fq)
+//                rows      : pageSize,
+//                sort      : "id asc", // needed for cursor searching
+//                wt        : "json"
+//        ]
+//        if (forRegionFeatured) {
+//            pageSize = 1000
+//            def sampledField = grailsApplication.config.regionFeaturedLayerSampledField + '_s'
+//            //TODO set fl below with this
+//            paramsMap = [
+//                    q         : "idxtype:REGIONFEATURED",
+//                    cursorMark: "*", // gets updated by subsequent searches
+//                    fl        : "id,idxtype,guid,bbg_name_s", // will restrict results to docs with these fields (bit like fq)
+//                    rows      : pageSize,
+//                    sort      : "id asc", // needed for cursor searching
+//                    wt        : "json"
+//            ]
+//        }
+//        try {
+//            if (forRegionFeatured) {
+//                clearFieldValues("occurrenceCount", "idxtype:REGIONFEATURED", online)
+//            } else {
+//                clearFieldValues("occurrenceCount", "idxtype:TAXON", online)
+//
+//                if (grailsApplication.config?.additionalOccurrenceCountsJSON) {
+//                    def jsonSlurper = new JsonSlurper()
+//                    def AdditionalOccStats = jsonSlurper.parseText(grailsApplication.config?.additionalOccurrenceCountsJSON ?: "[]")
+//                    AdditionalOccStats.each {
+//                        log.info("it.solrfield = " + it.solrfield)
+//                        clearFieldValues(it.solrfield, "idxtype:TAXON", online)
+//                    }
+//                }
+//
+//            }
+//        } catch (Exception ex) {
+//            log.warn "Error clearing occurrenceCounts: ${ex.message}", ex
+//        }
+//
+//
+//        // first get a count of results so we can determine number of pages to process
+//        Map countMap = paramsMap.clone(); // shallow clone is OK
+//        countMap.rows = 0
+//        countMap.remove("cursorMark")
+//        def searchCount = searchService.getCursorSearchResults(new MapSolrParams(countMap), !online)
+//        // could throw exception
+//        def totalDocs = searchCount?.response?.numFound ?: 0
+//        int totalPages = (totalDocs + pageSize - 1) / pageSize
+//        if (!forRegionFeatured) {
+//            log.debug "totalDocs = ${totalDocs} || totalPages = ${totalPages}"
+//            log("Processing " + String.format("%,d", totalDocs) + " taxa (via ${paramsMap.q})...<br>")
+//            // send to browser
+//        } else {
+//            log.debug "Featured Region - totalDocs = ${totalDocs} || totalPages = ${totalPages}"
+//            log("Processing " + String.format("%,d", totalDocs) + " places (via ${paramsMap.q})...<br>")
+//            // send to browser
+//        }
+//
+//        def promiseList = new PromiseList() // for biocache queries
+//        Queue commitQueue = new ConcurrentLinkedQueue()  // queue to put docs to be indexes
+//        ExecutorService executor = Executors.newSingleThreadExecutor() // consumer of queue - single blocking thread
+//        executor.execute {
+//            indexDocInQueue(commitQueue, "initialised", online)
+//            // will keep polling the queue until terminated via cancel()
+//        }
+//
+//        // iterate over pages
+//        (1..totalPages).each { page ->
+//            try {
+//                MapSolrParams solrParams = new MapSolrParams(paramsMap)
+//                log.debug "${page}. paramsMap = ${paramsMap}"
+//                def searchResults = searchService.getCursorSearchResults(solrParams, !online)
+//                // use offline or online index to search
+//                def resultsDocs = searchResults?.response?.docs ?: []
+//
+//
+//                // buckets to group results into
+//                def taxaLocatedInHubCountry = []  // automatically get included
+//                def taxaToSearchOccurrences = []  // need to search biocache to see if they are located in hub country
+//                def placesToSearchOccurrences = []
+//
+//                if (!forRegionFeatured) {
+//                    // iterate over the result set
+//                    resultsDocs.each { doc ->
+//                        if (nationalSpeciesDatasets && nationalSpeciesDatasets.contains(doc.datasetID)) {
+//                            taxaLocatedInHubCountry.add(doc)
+//                            // in national list so _assume_ it is located in host/hub county
+//                        } else {
+//                            taxaToSearchOccurrences.add(doc)
+//                            // search occurrence records to determine if it is located in host/hub county
+//                        }
+//                    }
+//                    log("${page}. taxaLocatedInHubCountry = ${taxaLocatedInHubCountry.size()} | taxaToSearchOccurrences = ${taxaToSearchOccurrences.size()}")
+//                    // update national list without occurrence record lookup
+//                    updateTaxaWithLocationInfo(taxaLocatedInHubCountry, commitQueue)
+//                    // update the rest via occurrence search (non blocking via promiseList)
+//                    promiseList << { searchOccurrencesWithGuids(resultsDocs, commitQueue) }
+//                } else {
+//                    // iterate over the result set
+//                    resultsDocs.each { doc ->
+//                        placesToSearchOccurrences.add(doc) // count occurrence records
+//                    }
+//                    promiseList << { searchOccurrencesWithSampledPlace(resultsDocs, commitQueue) }
+//                    log("${page}. placesToSearchOccurrences = ${placesToSearchOccurrences.size()}")
+//                }
+//
+//                // update cursor
+//                paramsMap.cursorMark = searchResults?.nextCursorMark ?: ""
+//                // update view via via JS
+//                updateProgressBar(totalPages, page)
+//
+//            } catch (Exception ex) {
+//                log.warn "Error calling BIE SOLR: ${ex.message}", ex
+//                log("ERROR calling SOLR: ${ex.message}")
+//            }
+//        }
+//
+//        log("Waiting for all occurrence searches and SOLR commits to finish (could take some time)")
+//
+//        //promiseList.get() // block until all promises are complete
+//        promiseList.onComplete { List results ->
+//            //executor.shutdownNow()
+//            isKeepIndexing = false // stop indexing thread
+//            executor.shutdown()
+//            if (!forRegionFeatured) {
+//                log("Total taxa found with occurrence records = ${results.sum()}")
+//            } else {
+//                log("Total places found with occurrence records = ${results.sum()}")
+//            }
+//            log("waiting for indexing to finish...")
+//        }
     }
 }
