@@ -3,7 +3,15 @@ package uk.org.nbn.bie
 import au.com.bytecode.opencsv.CSVReader
 import au.org.ala.bie.search.IndexDocType
 import au.org.ala.bie.util.Encoder
+import grails.async.PromiseList
+import grails.converters.JSON
 import groovy.json.JsonSlurper
+import org.apache.solr.common.params.MapSolrParams
+import org.grails.web.json.JSONObject
+
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import java.util.zip.GZIPInputStream
 
 class ImportService extends au.org.ala.bie.ImportService{
@@ -146,6 +154,280 @@ class ImportService extends au.org.ala.bie.ImportService{
             }
         }
         return featuredDynamicFields;
+    }
+
+    /**
+     * TODO this method is for BBG and will be moved to an NBN extension to bie-index
+     * @param online
+     * @param forRegionFeatured
+     * @return
+     * @throws Exception
+     */
+    def importSpeciesCounts(Boolean online = false) throws Exception {
+        def pageSize = 1000
+        def paramsMap = [
+                q: "idxtype:REGIONFEATURED",
+                cursorMark: "*", // gets updated by subsequent searches
+                fl: "id,idxtype,guid,bbg_name_s", // will restrict results to docs with these fields (bit like fq)
+                rows: pageSize,
+                sort: "id asc", // needed for cursor searching
+                wt: "json"
+        ]
+
+        try {
+            clearFieldValues("speciesCount", "idxtype:REGIONFEATURED", online)
+        } catch (Exception ex) {
+            log.warn "Error clearing speciesCounts: ${ex.message}", ex
+        }
+
+
+        // first get a count of results so we can determine number of pages to process
+        Map countMap = paramsMap.clone(); // shallow clone is OK
+        countMap.rows = 0
+        countMap.remove("cursorMark")
+        def searchCount = searchService.getCursorSearchResults(new MapSolrParams(countMap), !online) // could throw exception
+        def totalDocs = searchCount?.response?.numFound?:0
+        int totalPages = (totalDocs + pageSize - 1) / pageSize
+        log.debug "Featured Region - totalDocs = ${totalDocs} || totalPages = ${totalPages}"
+        log("Processing " + String.format("%,d", totalDocs) + " places (via ${paramsMap.q})...<br>")
+        // send to browser
+
+        def promiseList = new PromiseList() // for biocache queries
+        Queue commitQueue = new ConcurrentLinkedQueue()  // queue to put docs to be indexes
+        ExecutorService executor = Executors.newSingleThreadExecutor() // consumer of queue - single blocking thread
+        executor.execute {
+            indexDocInQueue(commitQueue, "initialised", online) // will keep polling the queue until terminated via cancel()
+        }
+
+        // iterate over pages
+        (1..totalPages).each { page ->
+            try {
+                MapSolrParams solrParams = new MapSolrParams(paramsMap)
+                log.debug "${page}. paramsMap = ${paramsMap}"
+                def searchResults = searchService.getCursorSearchResults(solrParams, !online) // use offline or online index to search
+                def resultsDocs = searchResults?.response?.docs?:[]
+
+
+                // buckets to group results into
+                def placesToSearchSpecies = []
+
+                // iterate over the result set
+                resultsDocs.each { doc ->
+                    placesToSearchSpecies.add(doc)
+                }
+                promiseList << { searchSpeciesCountsForPlaces(resultsDocs, commitQueue) }
+                log("${page}. placesToSearchSpecies = ${placesToSearchSpecies.size()}")
+
+
+                // update cursor
+                paramsMap.cursorMark = searchResults?.nextCursorMark?:""
+                // update view via via JS
+                updateProgressBar(totalPages, page)
+
+            } catch (Exception ex) {
+                log.warn "Error calling BIE SOLR: ${ex.message}", ex
+                log("ERROR calling SOLR: ${ex.message}")
+            }
+        }
+
+        log("Waiting for all species searches and SOLR commits to finish (could take some time)")
+
+        //promiseList.get() // block until all promises are complete
+        promiseList.onComplete { List results ->
+            //executor.shutdownNow()
+            isKeepIndexing = false // stop indexing thread
+            executor.shutdown()
+            log("Total places found with species counts = ${results.sum()}")
+            log("waiting for indexing to finish...")
+        }
+    }
+
+    def updatePlacesWithLocationInfo(List docs, Queue commitQueue) {
+        def totalDocumentsUpdated = 0
+
+        docs.each { Map doc ->
+            if (doc.containsKey("id") && doc.containsKey("idxtype")) {
+                Map updateDoc = [:]
+                updateDoc["id"] = doc.id // doc key
+                updateDoc["idxtype"] = ["set": doc.idxtype] // required field
+                updateDoc["guid"] = ["set": doc.guid] // required field
+                if(doc.containsKey("occurrenceCount")){
+                    updateDoc["occurrenceCount"] = ["set": doc["occurrenceCount"]]
+                }
+                commitQueue.offer(updateDoc) // throw it on the queue
+                totalDocumentsUpdated++
+            } else {
+                log.warn "Updating doc error: missing keys ${doc}"
+            }
+        }
+
+        totalDocumentsUpdated
+    }
+
+    /**
+     * TODO this method is for BBG and will be moved to an NBN extension to bie-index
+     * @param docs
+     * @param commitQueue
+     * @return
+     */
+    def updatePlacesWithSpeciesCount(List docs, Queue commitQueue) {
+        def totalDocumentsUpdated = 0
+
+        docs.each { Map doc ->
+            if (doc.containsKey("id") && doc.containsKey("idxtype") && doc.containsKey("speciesCount")) {
+                Map updateDoc = [:]
+                updateDoc["id"] = doc.id // doc key
+                updateDoc["idxtype"] = ["set": doc.idxtype] // required field
+                updateDoc["guid"] = ["set": doc.guid] // required field
+                updateDoc["speciesCount"] = ["set": doc["speciesCount"]]
+                commitQueue.offer(updateDoc) // throw it on the queue
+                totalDocumentsUpdated++
+            } else {
+                log.warn "Updating doc error: missing keys ${doc}"
+            }
+        }
+
+        totalDocumentsUpdated
+    }
+
+    def searchOccurrencesWithSampledPlace(List docs, Queue commitQueue) {
+        int batchSize = 25 // even with POST SOLR throws 400 code if batchSize is more than 100
+        def clField = "cl" + grailsApplication.config.regionFeaturedLayerIds
+        def sampledField = grailsApplication.config.regionFeaturedLayerSampledField + '_s'
+        List place_names = docs.collect { it.bbg_name_s } //TODO:
+        int totalPages = ((place_names.size() + batchSize - 1) / batchSize) -1
+        log.debug "total = ${place_names.size()} || batchSize = ${batchSize} || totalPages = ${totalPages}"
+        List docsWithRecs = [] // docs to index
+        //log("Getting occurrence data for ${docs.size()} docs")
+
+        (0..totalPages).each { index ->
+            int start = index * batchSize
+            int end = (start + batchSize < place_names.size()) ? start + batchSize : place_names.size()
+            log "paging place biocache search - ${start} to ${end-1}"
+            def placeSubset = place_names.subList(start,end)
+            //URIUtil.encodeWithinQuery(place).replaceAll("%26","&").replaceAll("%3D","=").replaceAll("%3A",":")
+            def placeParamList = placeSubset.collect { String place -> '"' + place + '"' } // URL encode place names
+            def query = clField + ":" + placeParamList.join("+OR+" + clField + ":")
+
+
+            try {
+                // def json = searchService.doPostWithParamsExc(grailsApplication.config.biocache.solr.url +  "/select", postBody)
+                // log.debug "results = ${json?.resp?.response?.numFound}"
+                def url = grailsApplication.config.biocache.solr.url + "/select?q=${query}"
+
+                def url_clean = Encoder.encodeUrl(url)
+                        .replaceAll("&amp;","&")
+                        .replaceAll("&","%26")
+                        .replaceAll("%3D","=")
+                        .replaceAll("%3A",":")
+                        .replaceAll("'","%27")
+                url_clean = url_clean + "&wt=json&indent=true&rows=0&facet=true&facet.field=" + clField + "&facet.mincount=1"
+
+                def queryResponse = new URL(url_clean).getText("UTF-8")
+                JSONObject jsonObj = JSON.parse(queryResponse)
+
+                if (jsonObj.containsKey("facet_counts")) {
+
+                    def facetCounts = jsonObj?.facet_counts?.facet_fields.get(clField)
+                    facetCounts.eachWithIndex { val, idx ->
+                        // facets results are a list with key, value, key, value, etc
+                        if (idx % 2 == 0) {
+                            def docWithRecs = docs.find { it.bbg_name_s == val }
+                            docWithRecs["occurrenceCount"] = facetCounts[idx + 1] //add the count
+                            if(docWithRecs){
+                                docsWithRecs.add(docWithRecs )
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                log.warn "Error calling biocache SOLR: ${ex.message}", ex
+                log("ERROR calling biocache SOLR: ${ex.message}")
+            }
+        }
+
+        if (docsWithRecs.size() > 0) {
+            log.debug "docsWithRecs size = ${docsWithRecs.size()} vs docs size = ${docs.size()}"
+            updatePlacesWithLocationInfo(docsWithRecs, commitQueue)
+        }
+
+    }
+
+
+/**
+ * TODO this method is for BBG and will be moved to an NBN extension to bie-index
+ * @param docs
+ * @param commitQueue
+ * @return
+ */
+    def searchSpeciesCountsForPlaces(List docs, Queue commitQueue) {
+        int batchSize = 25 // even with POST SOLR throws 400 code if batchSize is more than 100
+        def clField = "cl" + grailsApplication.config.regionFeaturedLayerIds
+        def sampledField = grailsApplication.config.regionFeaturedLayerSampledField + '_s'
+        List place_names = docs.collect { it.bbg_name_s } //TODO:
+        int totalPages = ((place_names.size() + batchSize - 1) / batchSize) -1
+        log.debug "total = ${place_names.size()} || batchSize = ${batchSize} || totalPages = ${totalPages}"
+        List docsWithRecs = [] // docs to index
+        //log("Getting occurrence data for ${docs.size()} docs")
+
+        (0..totalPages).each { index ->
+            int start = index * batchSize
+            int end = (start + batchSize < place_names.size()) ? start + batchSize : place_names.size()
+            log "paging place biocache search - ${start} to ${end-1}"
+            def placeSubset = place_names.subList(start,end)
+            //URIUtil.encodeWithinQuery(place).replaceAll("%26","&").replaceAll("%3D","=").replaceAll("%3A",":")
+            def placeParamList = placeSubset.collect { String place -> '"' + place + '"' } // URL encode place names
+            def query = clField + ":" + placeParamList.join("+OR+" + clField + ":")
+
+
+            try {
+                // def json = searchService.doPostWithParamsExc(grailsApplication.config.biocache.solr.url +  "/select", postBody)
+                // log.debug "results = ${json?.resp?.response?.numFound}"
+                def url = grailsApplication.config.biocache.solr.url + "/select?q=${query}"
+
+                def url_clean = Encoder.encodeUrl(url)
+                        .replaceAll("&amp;","&")
+                        .replaceAll("&","%26")
+                        .replaceAll("%3D","=")
+                        .replaceAll("%3A",":")
+                        .replaceAll("'","%27")
+                url_clean = url_clean + "&wt=json&indent=true&rows=0&facet=true&facet.pivot=lsid," + clField + "&facet.mincount=1&facet.limit=-1"
+
+                def queryResponse = new URL(url_clean).getText("UTF-8")
+                JSONObject jsonObj = JSON.parse(queryResponse)
+
+                if (jsonObj.containsKey("facet_counts")) {
+
+                    def facetPivots = jsonObj?.facet_counts?.facet_pivot.get("lsid,"+clField)
+
+                    facetPivots.each { facetPivot ->
+                        facetPivot.pivot.each { pivot ->
+                            def docWithRecs = docs.find { it.bbg_name_s == pivot.value }
+                            if (docWithRecs) {
+                                if (docWithRecs["speciesCount"]) {
+                                    docWithRecs["speciesCount"] ++
+                                } else {
+                                    docWithRecs["speciesCount"] = 1
+                                }
+                                if (!docsWithRecs.find {it.id == docWithRecs.id }) {
+                                    docsWithRecs.add(docWithRecs)
+                                }
+
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                log.warn "Error calling biocache SOLR: ${ex.message}", ex
+                log("ERROR calling biocache SOLR: ${ex.message}")
+            }
+        }
+
+        if (docsWithRecs.size() > 0) {
+            log.debug "docsWithRecs size = ${docsWithRecs.size()} vs docs size = ${docs.size()}"
+            updatePlacesWithSpeciesCount(docsWithRecs, commitQueue)
+        }
+
     }
 
 
