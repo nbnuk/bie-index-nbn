@@ -5,11 +5,13 @@ import au.org.ala.bie.util.Encoder
 import grails.converters.JSON
 import groovy.json.JsonSlurper
 import org.apache.solr.client.solrj.util.ClientUtils
+import uk.org.nbn.bie.search.PlacesAutoCompleteDTO
 
 import java.util.regex.Pattern
 
 /**
  * Provides auto complete services - this is the code from pre FFTF AutoCompleteService.
+ * Its what is used by BBG
  */
 class PlacesAutoCompleteService{
 
@@ -33,153 +35,28 @@ class PlacesAutoCompleteService{
         log.debug "autocomplete query = ${query}"
 
         String queryUrl
-        if (otherParams[0]?.contains("REGIONFEATURED")) {
+//        if (otherParams[0]?.contains("REGIONFEATURED")) {
             queryUrl = grailsApplication.config.indexLiveBaseUrl + "/suggest_region_featured?" + query.join('&')
-        } else {
-            queryUrl = grailsApplication.config.indexLiveBaseUrl + "/suggest?" + query.join('&')
-        }
+//        } else {
+//            queryUrl = grailsApplication.config.indexLiveBaseUrl + "/suggest?" + query.join('&')
+//        }
         log.debug "queryUrl = |${queryUrl}|"
         def queryResponse = new URL(Encoder.encodeUrl(queryUrl)).getText("UTF-8")
         def js = new JsonSlurper()
         def json = js.parseText(queryResponse)
 
 
-        if (otherParams[0]?.contains("REGIONFEATURED")) {
+//        if (otherParams[0]?.contains("REGIONFEATURED")) {
             json.grouped.bbg_name_s.groups.each { group ->
                 autoCompleteList << createRegionFeaturedAutoCompleteFromIndex(group.doclist.docs[0], q)
-            }
-        } else {
-            json.grouped.scientificName_s.groups.each { group ->
-                autoCompleteList << createAutoCompleteFromIndex(group.doclist.docs[0], q)
-            }
+//            }
+//        } else {
+//            json.grouped.scientificName_s.groups.each { group ->
+//                autoCompleteList << createAutoCompleteFromIndex(group.doclist.docs[0], q)
+//            }
         }
         log.debug("results: " + autoCompleteList.size())
         autoCompleteList
-    }
-
-    /**
-     * Legacy Autocomplete service. This uses the normal /select service.
-     * NOTE: region featured search not implemented here yet
-     *
-     * @param q
-     * @param otherParams
-     * @return
-     */
-    List autoLegacy(String q, List otherParams) {
-        log.warn("Called autoLegacy")
-        []
-        //the code has  been commented out because it is legacy, it does not get called and so we
-        //are not going to test it during FFTF decoupling
-//        log.debug("auto called with q = " + q)
-//
-//        def autoCompleteList = []
-//        def query = []
-//        // TODO store param string in config var
-//        String qf = "qf=commonNameSingle^100+commonName^100+auto_text^100+text"
-//        String bq = "bq=taxonomicStatus:accepted^1000&bq=rankID:7000^500&bq=rankID:6000^100&bq=-scientificName:\"*+x+*\"^100"
-//        def additionalParams = "&defType=edismax&${qf}&${bq}&wt=json"
-//
-//        if (!q || q.trim() == "*") {
-//            query << "q=*:*"
-//        } else if (q) {
-//            // encode query (no fields needed due to qf params
-//            query << "q=" + URLEncoder.encode("" + q + "", "UTF-8")
-//        }
-//        query << "wt=json"
-//        if (grailsApplication.config.solr.qf) {
-//            query << "qf=${grailsApplication.config.solr.qf}"
-//        }
-//        grailsApplication.config.solr.bq.each { query << "bq=${it}" }
-//        if (grailsApplication.config.solr.defType) {
-//            query << "defType=${grailsApplication.config.solr.defType}"
-//        }
-//        query.addAll(additionalParams)
-//        log.debug "queryString = ${query}"
-//
-//        String queryUrl = grailsApplication.config.indexLiveBaseUrl + "/select?" + query.join('&')
-//        log.debug "queryUrl = |${queryUrl}|"
-//        def queryResponse = new URL(Encoder.encodeUrl(queryUrl)).getText("UTF-8")
-//        def js = new JsonSlurper()
-//        def json = js.parseText(queryResponse)
-//
-//        json.response.docs.each {
-//            autoCompleteList << createAutoCompleteFromIndex(it, q)
-//        }
-//
-//        // sort by rank ID
-//        // code removed by Nick (2016-08-02) see issue #72 - boost query values now perform same function
-//
-//        log.debug("results: " + autoCompleteList.size())
-//        autoCompleteList
-    }
-
-    /**
-     * Creates an auto complete DTO from the supplied result.
-     * @param qr
-     * @param doc
-     * @param value
-     * @return
-     */
-    private def createAutoCompleteFromIndex(Map doc, String value){
-        log.debug "doc = ${doc as JSON}"
-        def autoDto = new AutoCompleteDTO();
-        autoDto.guid = doc.guid
-        autoDto.name = doc.scientificName
-
-        if(doc.acceptedConceptID){
-            autoDto.guid = doc.acceptedConceptID
-        }
-
-        if(doc.commonName){
-            autoDto.commonName =  doc.commonName.first()
-        }
-
-        autoDto.rankString = doc.rank
-        autoDto.rankID = doc.rankID
-
-        List<String> matchedNames = [] // temp list to stored matched names
-
-        if(doc.commonName ){
-            autoDto.setCommonNameMatches(getHighlightedNames(doc.commonName, value, "<b>", "</b>"));
-            matchedNames.addAll(getHighlightedNames(doc.commonName, value, "", ""));
-        }
-
-        String[] name1 = new String[0];
-        Object o = doc.get("scientificNameRaw");
-        if(o != null){
-            if(o instanceof String){
-                name1 = ((String)o).split(",");
-            }
-            else if (o instanceof ArrayList){
-                name1 = ((List<String>) o).toArray(name1);
-            }
-        }
-
-        ArrayList<String> scientificNames = new ArrayList<String>();
-        for(String name : name1){
-            scientificNames.add(name);
-        }
-
-        String nc = doc.get("scientificName")
-        if (nc != null) {
-            scientificNames.add(nc);
-            autoDto.setScientificNameMatches(getHighlightedNames([nc], value, "<b>", "</b>"));
-        }
-
-        if (scientificNames) {
-            matchedNames.addAll(getHighlightedNames(scientificNames, value, "", ""));
-        } else if (doc.doc_name) {
-            matchedNames.addAll(getHighlightedNames(doc.doc_name, value, "", ""));
-        }
-
-
-        if(!matchedNames){
-            matchedNames << autoDto.name
-        }
-
-        autoDto.matchedNames = matchedNames
-
-        autoDto
     }
 
     /**
@@ -191,7 +68,7 @@ class PlacesAutoCompleteService{
      */
     private def createRegionFeaturedAutoCompleteFromIndex(Map doc, String value){
         log.debug "doc = ${doc as JSON}"
-        def autoDto = new AutoCompleteDTO();
+        def autoDto = new PlacesAutoCompleteDTO();
         autoDto.guid = doc.guid
         autoDto.name = doc.bbg_name_s
 
