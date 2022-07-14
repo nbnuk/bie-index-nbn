@@ -160,7 +160,7 @@ class ImportService extends au.org.ala.bie.ImportService{
     }
 
     /**
-     * TODO this method is for BBG and will be moved to an NBN extension to bie-index
+     *
      * @param online
      * @param forRegionFeatured
      * @return
@@ -358,7 +358,7 @@ class ImportService extends au.org.ala.bie.ImportService{
 
 
 /**
- * TODO this method is for BBG and will be moved to an NBN extension to bie-index
+ *
  * @param docs
  * @param commitQueue
  * @return
@@ -489,6 +489,46 @@ class ImportService extends au.org.ala.bie.ImportService{
             int i = name.lastIndexOf("</span></span>")
             name.replace(/<\/span><\/span>$/,nomenclaturalStatus+"</span></span>")
         }
+    }
+
+    /**
+     * This is copied from ALA ImportService. It is not in the upgrade but it is needed
+     * for BBG's importSpeciesCounts (in this class)
+     * Poll the queue of docs and index in batches
+     *
+     * @param updateDocs
+     * @return
+     */
+    @Override
+    def indexDocInQueue(Queue updateDocs, msg, Boolean online = false) {
+        int batchSize = 1000
+
+        while (isKeepIndexing || updateDocs.size() > 0) {
+            if (updateDocs.size() > 0) {
+                log.info "Starting indexing of ${updateDocs.size()} docs"
+                try {
+                    // batch index docs
+                    List batchDocs = []
+                    int end = (batchSize < updateDocs.size()) ? batchSize : updateDocs.size()
+
+                    (1..end).each {
+                        if (updateDocs.peek()) {
+                            batchDocs.add(updateDocs.poll())
+                        }
+                    }
+
+                    indexService.indexBatch(batchDocs, online) // index
+                } catch (Exception ex) {
+                    log.warn "Error batch indexing: ${ex.message}", ex
+                    log.warn "updateDocs = ${updateDocs}"
+                    log("ERROR batch indexing: ${ex.message} <br><code>${ex.stackTrace}</code>")
+                }
+            } else {
+                sleep(500)
+            }
+        }
+
+        log("Indexing thread is done: ${msg}")
     }
 
 
