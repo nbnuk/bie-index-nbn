@@ -14,8 +14,9 @@ $( document ).ready(function() {
         }
 
 
-        $("#page-body ul li:last").before('<li><a href="/admin/import/occurrencesplaces">Import Places occurrences (for featured region)</a> Augment places with occurrences data - index number of records.</li>');
-        $("#page-body ul li:last").before('<li><a href="/admin/import/speciescountsplaces">Import Places species counts (for featured region)</a> Augment places with species counts - index number of records .</li>');
+        $("#page-body ul li:last").before('<li><a href="/admin/import/featuredregions">Import Featured Regions</a></li>');
+        $("#page-body ul li:last").before('<li><a href="/admin/import/occurrencesplaces">Import Places Occurrences (for featured region)</a> Augment places with occurrences data - index number of records.</li>');
+        $("#page-body ul li:last").before('<li><a href="/admin/import/speciescountsplaces">Import Places Species cCounts (for featured region)</a> Augment places with species counts - index number of records .</li>');
         $("#page-body ul li:last").remove();
 
 
