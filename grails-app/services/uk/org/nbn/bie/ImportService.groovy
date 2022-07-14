@@ -83,7 +83,7 @@ class ImportService extends au.org.ala.bie.ImportService{
                 if (currentLine.length >= expectedHeaders.size()) {
 
                     def doc2 = doc.findAll {it.key != "idxtype"}
-                    doc2["idxtype"] = IndexDocType.REGIONFEATURED.name()
+                    doc2["idxtype"] = "REGIONFEATURED"
                     def shp_idValue = currentLine[1]
                     if (featuredDynamicFields.containsKey(shp_idValue)) {
                         //find shp_idfield in xml FIELDSSID (="BBG_UNIQUE" for our example)
