@@ -37,7 +37,7 @@ class SearchService extends au.org.ala.bie.SearchService{
      * @param useOfflineIndex
      * @return
      */
-    @Override
+
     def lookupSynonyms(String taxonID, Boolean useOfflineIndex = false){
         def indexServerUrlPrefix = useOfflineIndex ? grailsApplication.config.indexOfflineBaseUrl : grailsApplication.config.indexLiveBaseUrl
         def encID = URLEncoder.encode(taxonID, 'UTF-8')
