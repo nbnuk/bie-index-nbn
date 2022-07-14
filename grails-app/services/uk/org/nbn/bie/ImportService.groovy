@@ -3,10 +3,13 @@ package uk.org.nbn.bie
 import au.com.bytecode.opencsv.CSVReader
 import au.org.ala.bie.search.IndexDocType
 import au.org.ala.bie.util.Encoder
+import au.org.ala.vocab.ALATerm
 import grails.async.PromiseList
 import grails.converters.JSON
 import groovy.json.JsonSlurper
 import org.apache.solr.common.params.MapSolrParams
+import org.gbif.dwc.terms.DwcTerm
+import org.gbif.dwca.record.Record
 import org.grails.web.json.JSONObject
 
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -430,8 +433,66 @@ class ImportService extends au.org.ala.bie.ImportService{
 
     }
 
+    @Override
+    def buildTaxonRecord(Record record, Map doc, Map attributionMap, Map datasetMap, Map taxonRanks, String defaultTaxonomicStatus, String defaultDatasetName) {
 
-    //This is legacy (pre FFTF) importOccurrenceData. It was customised for BBG. Before FFTF, BBG stopped
+        super.buildTaxonRecord(record, doc, attributionMap, datasetMap, taxonRanks, defaultTaxonomicStatus, defaultDatasetName)
+        def nomenclaturalStatus = record.value(DwcTerm.nomenclaturalStatus)
+
+        doc["nameComplete"] = buildNameComplete(nameComplete, scientificName, scientificNameAuthorship, nomenclaturalStatus)
+        doc["nameFormatted"] = buildNameFormatted(nameFormatted, nameComplete, scientificName, scientificNameAuthorship, taxonRank, taxonRanks, nomenclaturalStatus)
+
+    }
+
+    /**
+     * Build a complete name + author
+     * <p>
+     * Some names are funny. So if there is a name supplied used that.
+     * Otherwise try to build the name from scientific name + authorship
+     *
+     * @param nameComplete The supplied complete name, if available
+     * @param scientificName The scientific name
+     * @param scientificNameAuthorship The authorship
+     * @return
+     */
+    String buildNameComplete(String nameComplete, String scientificName, String scientificNameAuthorship, String nomenclaturalStatus = "") {
+        String name = super.buildNameComplete(nameComplete, scientificName, scientificNameAuthorship)
+        if (nameComplete || !nomenclaturalStatus) {
+            return name
+        }
+        else {
+            return name + " " + nomenclaturalStatus
+        }
+    }
+
+    /**
+     * Build an HTML formatted name
+     * <p>
+     * If a properly formatted name is supplied, then use that.
+     * Otherwise, try yo build the name from the supplied information.
+     * The HTMLised name is escaped and uses spans to encode formatting information.
+     *
+     *
+     * @param nameFormatted The formatted name, if available
+     * @param nameComplete The complete name, if available
+     * @param scientificName The scientific name
+     * @param scientificNameAuthorship The name authorship
+     * @param rank The taxon rank
+     * @param rankMap The lookup table for ranks
+     *
+     * @return The formatted name
+     */
+    String buildNameFormatted(String nameFormatted, String nameComplete, String scientificName,
+                              String scientificNameAuthorship, String rank, Map rankMap, String nomenclaturalStatus = "") {
+        String name = super.buildNameFormatted(nameFormatted, nameComplete, scientificName, scientificNameAuthorship, rank, rankMap)
+        if (!(nameFormatted || nameComplete) && !nomenclaturalStatus) {
+            int i = name.lastIndexOf("</span></span>")
+            name.replace(/<\/span><\/span>$/,nomenclaturalStatus+"</span></span>")
+        }
+    }
+
+
+        //This is legacy (pre FFTF) importOccurrenceData. It was customised for BBG. Before FFTF, BBG stopped
     //requiring this method. If they want it back again, then either uncomment this out (may need a little
     //work and retrieval of the method clearFieldValues obtained from the legacy fork) or reimplement using the new
     //ALA version as an example
