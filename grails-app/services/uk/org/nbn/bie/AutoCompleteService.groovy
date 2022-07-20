@@ -21,6 +21,7 @@ class AutoCompleteService extends au.org.ala.bie.AutoCompleteService{
             super.autoSuggest(q, otherParams)
         }
         else {
+            log.debug("calling placesAutoCompleteService")
             placesAutoCompleteService.autoSuggest(q, otherParams)
         }
     }
