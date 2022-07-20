@@ -20,41 +20,41 @@ import java.util.zip.GZIPInputStream
 class ImportService extends au.org.ala.bie.ImportService{
 
     def importFeaturedRegions() {
-        log "Starting featured regions import"
+        log ("Starting featured regions import "+grailsApplication.config.regionFeaturedLayerIds)
         String[] regionFeaturedIds
         if(grailsApplication.config.regionFeaturedLayerIds) {
             regionFeaturedIds = grailsApplication.config.regionFeaturedLayerIds.split(',')
             log("Featured regions = " + regionFeaturedIds.toString())
         }
-        def js = new JsonSlurper()
-        def layers = js.parseText(new URL(Encoder.encodeUrl(grailsApplication.config.layersServicesUrl + "/layers")).getText("UTF-8"))
+
+        def layers = getLayers()
+
         layers.each { layer ->
-            if (layer.type == "Contextual" && layer.enabled.toBoolean()) {
+            if (layer.type == "Contextual" && layer.enabled.toBoolean() && isFeaturedRegionLayer(layer)) {
                 importFeaturedRegionLayer(layer)
             }
         }
-        log "Finished indexing ${layers.size()} featured region layers"
         log "Finished featured regions import"
     }
 
+    protected getLayers() {
+        def js = new JsonSlurper()
+        js.parseText(new URL(Encoder.encodeUrl(grailsApplication.config.layersServicesUrl + "/layers")).getText("UTF-8"))
+    }
 
-
-
-
-
-
-        @Override
+    @Override
     protected def importLayer(layer) {
         if (!layer.enabled.toBoolean()) {
             return false;
         }
 
         super.importLayer(layer);
+        return true;
     }
 
-    private def importFeaturedRegionLayer(layer) {
+    protected def importFeaturedRegionLayer(layer) {
         if (!isFeaturedRegionLayer(layer))
-            return
+            return false;
         log("Loading regions from layer " + layer.name + " (" + layer.id + ")")
 
         def tempFilePath = "/tmp/objects_${layer.id}.csv.gz"
@@ -115,6 +115,7 @@ class ImportService extends au.org.ala.bie.ImportService{
                 batch.clear()
             }
         }
+        return true;
     }
 
 
@@ -485,10 +486,19 @@ class ImportService extends au.org.ala.bie.ImportService{
     String buildNameFormatted(String nameFormatted, String nameComplete, String scientificName,
                               String scientificNameAuthorship, String rank, Map rankMap, String nomenclaturalStatus = "") {
         String name = super.buildNameFormatted(nameFormatted, nameComplete, scientificName, scientificNameAuthorship, rank, rankMap)
-        if (!(nameFormatted || nameComplete) && !nomenclaturalStatus) {
-            int i = name.lastIndexOf("</span></span>")
-            name.replace(/<\/span><\/span>$/,nomenclaturalStatus+"</span></span>")
+        if (!(nameFormatted || nameComplete)) {
+            if (scientificNameAuthorship) {
+                int i = name.lastIndexOf("</span></span>")
+                name = name.replaceAll(/<\/span><\/span>$/, " "+nomenclaturalStatus + "</span></span>")
+            }
+            else if (nomenclaturalStatus) {
+                int i = name.lastIndexOf("</span></span>")
+                name = name.replaceAll(/<\/span><\/span>$/, " <span class=\"author\">"+nomenclaturalStatus + "</span></span>")
+            }
         }
+
+
+        return name
     }
 
     /**
