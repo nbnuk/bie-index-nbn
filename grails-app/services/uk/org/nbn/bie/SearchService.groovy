@@ -56,16 +56,31 @@ class SearchService extends au.org.ala.bie.SearchService{
     def getTaxon(taxonLookup) {
         def model = super.getTaxon(taxonLookup)
 
-        //exclude entries where label is empty
-        model.conservationStatuses.findAll{it.key != ""}
-
-        //sort=nameComplete+ASC"
-        model.synonyms.sort{it.nameComplete}
+        getTaxonExtra(model)
 
         addOccurrenceCountsToTaxonModel(model, super.lookupTaxon(model.taxonConcept.guid))
 
         model
 
+    }
+
+    /**
+     * Method created really for unit testing purposes. It adds extra properties to the taxon model
+     * @param model
+     * @return
+     */
+    protected def getTaxonExtra(model) {
+        //exclude entries where label is empty
+        model.conservationStatuses = model.conservationStatuses.findAll{
+            it.key != ""
+        }
+
+        //sort=nameComplete+ASC"
+        model.synonyms.sort{
+            it.nameComplete.toLowerCase()
+        }
+
+        model
     }
 
 
