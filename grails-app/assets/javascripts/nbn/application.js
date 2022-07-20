@@ -12,11 +12,24 @@ $( document ).ready(function() {
         if (!h2 || h2.text().indexOf("Admin")<0) { //unique identifier for home page.
             return;
         }
+        let regions, occurrences;
+        $("#page-body ul li").each(function() {
+            if ($(this).html().indexOf("Import Regions")>-1) {
+                regions = this;
+            } else if ($(this).html().indexOf("Import Occurrences")>-1) {
+                occurrences = this;
+            }
+        });
 
+        if (regions) {
+            $(regions).after('<li><a href="/admin/import/featuredregions">Import Featured Regions</a> - BBG burial grounds</li>');
+        }
 
-        $("#page-body ul li:last").before('<li><a href="/admin/import/featuredregions">Import Featured Regions</a></li>');
-        $("#page-body ul li:last").before('<li><a href="/admin/import/occurrencesplaces">Import Places Occurrences (for featured region)</a> Augment places with occurrences data - index number of records.</li>');
-        $("#page-body ul li:last").before('<li><a href="/admin/import/speciescountsplaces">Import Places Species cCounts (for featured region)</a> Augment places with species counts - index number of records .</li>');
+        if (occurrences) {
+            $(occurrences).after('<li><a href="/admin/import/speciescountsplaces">Import Places Species Counts (for featured region)</a> Augment places with species counts - index number of records .</li>');
+            $(occurrences).after('<li><a href="/admin/import/occurrencesplaces">Import Places Occurrences (for featured region)</a> Augment places with occurrences data - index number of records.</li>');
+        }
+
         $("#page-body ul li:last").remove();
 
 
