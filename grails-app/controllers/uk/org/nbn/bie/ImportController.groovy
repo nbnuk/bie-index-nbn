@@ -22,6 +22,7 @@ class ImportController extends au.org.ala.bie.ImportController{
      * @return
      */
     def importOccurrencesPlaces(){
+        log.debug("importOccurrencesPlaces")
         def online = BooleanUtils.toBooleanObject(params.online ?: "false")
         def job = execute("importOccurrencesPlaces", "admin.button.loadoccurrenceplaces", { importService.importOccurrenceData(online, true) })
         asJson (job.status())
@@ -34,6 +35,7 @@ class ImportController extends au.org.ala.bie.ImportController{
      * @return
      */
     def importSpeciesCountsForPlaces(){
+        log.debug("importSpeciesCountsForPlaces")
         def online = BooleanUtils.toBooleanObject(params.online ?: "false")
         def job = execute("importSpeciesCounts", "admin.button.loadspeciescountsplaces", { importService.importSpeciesCounts(online) })
         asJson (job.status())
@@ -46,8 +48,9 @@ class ImportController extends au.org.ala.bie.ImportController{
      * @return
      */
     def importFeaturedRegions(){
+        log.debug("importFeaturedRegions")
         def online = BooleanUtils.toBooleanObject(params.online ?: "false")
-        def job = execute("importFeaturedRegions", "admin.button.importfeaturedregions", { importService.importFeaturedRegions(online, true) })
+        def job = execute("importFeaturedRegions", "admin.button.importfeaturedregions", { importService.importFeaturedRegions() })
         asJson (job.status())
 
     }
