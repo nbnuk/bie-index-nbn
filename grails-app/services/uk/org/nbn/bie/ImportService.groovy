@@ -19,6 +19,65 @@ import java.util.zip.GZIPInputStream
 
 class ImportService extends au.org.ala.bie.ImportService{
 
+    /**
+     * Removes field values from all records in index
+     * @param fld
+     * @throws Exception
+     */
+    def clearFieldValues(String fld) throws Exception {
+        try {
+            clearFieldValues(fld, "", false)
+        } catch (Exception ex) {
+            log.warn "Error clearing occurrenceCounts: ${ex.message}", ex
+        }
+    }
+    /**
+     * Removes field values from records in index matching the provided fq
+     * @param fld
+     * @param fq
+     * @throws Exception
+     */
+    def clearFieldValues(String fld, String fq, Boolean online) throws Exception {
+        int page = 1
+        int pageSize = 1000
+        def js = new JsonSlurper()
+        def baseUrl = online ? grailsApplication.config.indexLiveBaseUrl : grailsApplication.config.indexOfflineBaseUrl
+
+        try {
+            while (true) {
+                def solrServerUrl = baseUrl + "/select?wt=json&q=*:*&fq=" + fld + ":[*+TO+*]&start=0&rows=" + pageSize //note, always start at 0 since getting rid of all values
+                if (fq != "") solrServerUrl = solrServerUrl + "&fq=" + fq
+                log.info("SOLR clear field URL: " + solrServerUrl)
+                def queryResponse = Encoder.encodeUrl(solrServerUrl).toURL().getText("UTF-8")
+                def json = js.parseText(queryResponse)
+                int total = json.response.numFound
+                def docs = json.response.docs
+                def buffer = []
+
+                if (docs.isEmpty())
+                    break
+                docs.each { doc ->
+                    def update = [:]
+                    Map<String, String> partialUpdateNull = new HashMap<String, String>();
+                    partialUpdateNull.put("set", null);
+                    update["id"] = doc.id // doc key
+                    update["idxtype"] = ["set": doc.idxtype] // required field
+                    update["guid"] = ["set": doc.guid] // required field
+                    update[fld] = partialUpdateNull
+                    buffer << update
+                }
+                if (!buffer.isEmpty()) {
+                    log.info("Committing cleared fields to SOLR: #" + page.toString() + " set of " + pageSize.toString() + " records")
+                    indexService.indexBatch(buffer, online)
+                }
+                page++
+            }
+        } catch (Exception ex) {
+            log.error("Unable to clear field " + fld + " values ", ex)
+            log("Error: " + ex.getMessage())
+        }
+    }
+
     def importFeaturedRegions() {
         log ("Starting featured regions import "+grailsApplication.config.regionFeaturedLayerIds)
         String[] regionFeaturedIds
@@ -493,7 +552,7 @@ class ImportService extends au.org.ala.bie.ImportService{
             }
             else if (nomenclaturalStatus) {
                 int i = name.lastIndexOf("</span></span>")
-                name = name.replaceAll(/<\/span><\/span>$/, " <span class=\"author\">"+nomenclaturalStatus + "</span></span>")
+                name = name.replaceAll(/<\/span><\/span>$/, " </span><span class=\"author\">"+nomenclaturalStatus + "</span></span>")
             }
         }
 
