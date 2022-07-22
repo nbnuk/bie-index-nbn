@@ -5,7 +5,7 @@ import au.org.ala.bie.util.Encoder
 import grails.transaction.Transactional
 import groovy.json.JsonSlurper
 
-@Transactional
+
 class SearchService extends au.org.ala.bie.SearchService{
 
     /**
