@@ -8,11 +8,11 @@ $( document ).ready(function() {
     customise_import_occurrences_page();
 
     function customise_admin_index_page() {
-        let h2 = $("#page-body h2")
+        var h2 = $("#page-body h2")
         if (!h2 || h2.text().indexOf("Admin")<0) { //unique identifier for home page.
             return;
         }
-        let regions, occurrences;
+        var regions, occurrences;
         $("#page-body ul li").each(function() {
             if ($(this).html().indexOf("Import Regions")>-1) {
                 regions = this;
@@ -37,12 +37,12 @@ $( document ).ready(function() {
     }
 
     function customise_import_occurrences_page() {
-        let h2 = $("#main h2")
+        var h2 = $("#main h2")
         if (!h2 || h2.text().indexOf("Import Occurrences")<0) { //unique identifier for home page.
             return;
         }
 
-        let buttonContainer = $("button#start-import").parent();
+        var buttonContainer = $("button#start-import").parent();
 
         $("button#start-import").remove();
         buttonContainer.html(generate_button("start-import", false));
