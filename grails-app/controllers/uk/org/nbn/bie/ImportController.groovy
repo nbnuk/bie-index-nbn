@@ -24,7 +24,7 @@ class ImportController extends au.org.ala.bie.ImportController{
     def importOccurrencesPlaces(){
         log.debug("importOccurrencesPlaces")
         def online = BooleanUtils.toBooleanObject(params.online ?: "false")
-        def job = execute("importOccurrencesPlaces", "admin.button.loadoccurrenceplaces", { importService.importOccurrenceData(online, true) })
+        def job = execute("importOccurrencesPlaces", "admin.button.loadoccurrenceplaces", { importService.importOccurrenceDataForPlaces(online) })
         asJson (job.status())
 
     }
