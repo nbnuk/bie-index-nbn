@@ -47,7 +47,7 @@
     <g:render template="status" model="${[showTitle: true, showJob: true, showLog: true, startLog: false]}"/>
 <asset:script type="text/javascript">
     function loadSpeciesCounts(){
-        loadInfo("${createLink(controller:'placesImport', action:'importSpeciesCountsForPlaces')}?online=" + $('#use-online').is(':checked'));
+        loadInfo("${createLink(controller:'import', action:'importSpeciesCountsForPlaces')}?online=" + $('#use-online').is(':checked'));
     }
 </asset:script>
 </div>
