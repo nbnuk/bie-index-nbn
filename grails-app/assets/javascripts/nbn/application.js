@@ -49,7 +49,8 @@ $( document ).ready(function() {
         buttonContainer.append(generate_button("start-import2", true));
 
         function generate_button(id, online) {
-            return '<p style="margin-bottom:2rem"><button id="'+id+'" onclick="javascript:loadInfo(\'/admin/import/importOccurrences?online="+online+"\')" class="btn '+(online?"btn-danger":"btn-primary")+' import-button">Add occurrence information '+(online?" into ONLINE index (WARNING)":" into offline index")+'</button></p>';
+            var importUrl = "/admin/import/importOccurrences?online="+online;
+            return '<p style="margin-bottom:2rem"><button id="'+id+'" onclick="javascript:loadInfo(\''+importUrl+'\')" class="btn '+(online?"btn-danger":"btn-primary")+' import-button">Add occurrence information '+(online?" into ONLINE index (WARNING)":" into offline index")+'</button></p>';
         }
     }
 
