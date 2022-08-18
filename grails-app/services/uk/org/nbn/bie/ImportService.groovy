@@ -114,7 +114,13 @@ class ImportService extends au.org.ala.bie.ImportService{
     protected def importFeaturedRegionLayer(layer) {
         if (!isFeaturedRegionLayer(layer))
             return false;
-        log("Loading regions from layer " + layer.name + " (" + layer.id + ")")
+        log("Loading featured regions from layer " + layer.name + " (" + layer.id + ")")
+
+        def keywords = []
+
+        if (grailsApplication.config.localityKeywordsUrl) {
+            keywords = this.getConfigFile(grailsApplication.config.localityKeywordsUrl)
+        }
 
         def tempFilePath = "/tmp/objects_${layer.id}.csv.gz"
         def url = grailsApplication.config.layersServicesUrl + "/objects/csv/cl" + layer.id
@@ -123,70 +129,9 @@ class ImportService extends au.org.ala.bie.ImportService{
         file.flush()
         file.close()
 
-        def featuredDynamicFields = buildFeaturedDynamicFields(layer)
-
-        if (new File(tempFilePath).exists() && new File(tempFilePath).length() > 0) {
-
-            def gzipInput = new GZIPInputStream(new FileInputStream(tempFilePath))
-
-            //read file and index
-            def csvReader = new CSVReader(new InputStreamReader(gzipInput))
-
-            def expectedHeaders = ["pid", "id", "name", "description", "centroid", "featuretype"]
-
-            def headers = csvReader.readNext()
-            def currentLine = []
-            def batch = []
-            while ((currentLine = csvReader.readNext()) != null) {
-
-                if (currentLine.length >= expectedHeaders.size()) {
-
-                    def doc2 = doc.findAll {it.key != "idxtype"}
-                    doc2["idxtype"] = "REGIONFEATURED"
-                    def shp_idValue = currentLine[1]
-                    if (featuredDynamicFields.containsKey(shp_idValue)) {
-                        //find shp_idfield in xml FIELDSSID (="BBG_UNIQUE" for our example)
-                        def shpAttrs = featuredDynamicFields.get(shp_idValue)
-                        for (attr in shpAttrs.keySet()) {
-                            //add attr key to doc2[] with value attr.value
-                            doc2[attr + '_s'] = shpAttrs.get(attr)
-                        }
-                        def centroid = doc['centroid']?:'' //centroid will be something like POINT(-2.24837969557765 53.5201084106602)
-                        if (centroid) {
-                            def vals = centroid.findAll( /-?\d+\.\d*|-?\d*\.\d+|-?\d+/ )*.toDouble()
-                            if (vals.size() == 2) {
-                                doc2['longitude'] = vals[0]
-                                doc2['latitude'] = vals[1]
-                                doc2['point-0.0001'] = vals[1].round(4).toString() + ',' + vals[0].round(4).toString()
-                            }
-                        }
-                    }
-                    batch << doc2
-
-                    if (batch.size() > 10000) {
-                        indexService.indexBatch(batch)
-                        batch.clear()
-                    }
-                }
-            }
-            if (batch) {
-                indexService.indexBatch(batch)
-                batch.clear()
-            }
-        }
-        return true;
-    }
-
-
-
-    protected def isFeaturedRegionLayer(layer) {
-        String[] regionFeaturedIds = grailsApplication.config.regionFeaturedLayerIds?
-                grailsApplication.config.regionFeaturedLayerIds.split(','):[];
-        return regionFeaturedIds.contains(layer.id.toString())
-    }
-
-    protected buildFeaturedDynamicFields(layer) {
+        //START featuredRegionLayer (BBG) specific
         def featuredDynamicFields = [:]
+
         if (grailsApplication.config.regionFeaturedLayerFields) {
             //get additional dynamic fields to store
             def workspaceLayer = "ALA:" + layer.name
@@ -216,8 +161,101 @@ class ImportService extends au.org.ala.bie.ImportService{
 
             }
         }
-        return featuredDynamicFields;
+        //END featuredRegionLayer (BBG) specific
+
+        if (new File(tempFilePath).exists() && new File(tempFilePath).length() > 0) {
+
+            def gzipInput = new GZIPInputStream(new FileInputStream(tempFilePath))
+
+            //read file and index
+            def csvReader = new CSVReader(new InputStreamReader(gzipInput))
+
+            def expectedHeaders = ["pid", "id", "name", "description", "centroid", "featuretype"]
+
+            def headers = csvReader.readNext()
+            def currentLine = []
+            def batch = []
+            while ((currentLine = csvReader.readNext()) != null) {
+
+                if (currentLine.length >= expectedHeaders.size()) {
+
+                    def doc = [:]
+                    doc["id"] = currentLine[0]
+                    doc["guid"] = currentLine[0]
+
+                    if (currentLine[5] == "POINT") {
+                        doc["idxtype"] = IndexDocType.LOCALITY.name()
+                    } else {
+                        doc["idxtype"] = IndexDocType.REGION.name()
+                    }
+
+                    doc["name"] = currentLine[2]
+
+                    if (currentLine[3] && currentLine[2] != currentLine[3]) {
+                        doc["description"] = currentLine[3]
+                    } else {
+                        doc["description"] = layer.displayname
+                    }
+
+                    doc["centroid"] = currentLine[4]
+
+
+                    doc["distribution"] = "N/A"
+
+                    keywords.each {
+                        if(doc["description"].contains(it)){
+                            doc["distribution"] = it
+                        }
+                    }
+
+                    batch << doc
+
+                    //START featuredRegionLayer (BBG) specific
+                    def doc2 = doc.findAll {it.key != "idxtype"}
+                    doc2["idxtype"] = "REGIONFEATURED"
+                    def shp_idValue = currentLine[1]
+                    if (featuredDynamicFields.containsKey(shp_idValue)) {
+                        //find shp_idfield in xml FIELDSSID (="BBG_UNIQUE" for our example)
+                        def shpAttrs = featuredDynamicFields.get(shp_idValue)
+                        for (attr in shpAttrs.keySet()) {
+                            //add attr key to doc2[] with value attr.value
+                            doc2[attr + '_s'] = shpAttrs.get(attr)
+                        }
+                        def centroid = doc['centroid']?:'' //centroid will be something like POINT(-2.24837969557765 53.5201084106602)
+                        if (centroid) {
+                            def vals = centroid.findAll( /-?\d+\.\d*|-?\d*\.\d+|-?\d+/ )*.toDouble()
+                            if (vals.size() == 2) {
+                                doc2['longitude'] = vals[0]
+                                doc2['latitude'] = vals[1]
+                                doc2['point-0.0001'] = vals[1].round(4).toString() + ',' + vals[0].round(4).toString()
+                            }
+                        }
+                    }
+                    batch << doc2
+                    //END featuredRegionLayer (BBG) specific
+
+                    if (batch.size() > 10000) {
+                        indexService.indexBatch(batch)
+                        batch.clear()
+                    }
+                }
+            }
+            if (batch) {
+                indexService.indexBatch(batch)
+                batch.clear()
+            }
+        }
+        return true;
     }
+
+
+
+    protected def isFeaturedRegionLayer(layer) {
+        String[] regionFeaturedIds = grailsApplication.config.regionFeaturedLayerIds?
+                grailsApplication.config.regionFeaturedLayerIds.split(','):[];
+        return regionFeaturedIds.contains(layer.id.toString())
+    }
+
 
     /**
      *
@@ -498,7 +536,11 @@ class ImportService extends au.org.ala.bie.ImportService{
 
         super.buildTaxonRecord(record, doc, attributionMap, datasetMap, taxonRanks, defaultTaxonomicStatus, defaultDatasetName)
         def nomenclaturalStatus = record.value(DwcTerm.nomenclaturalStatus)
-
+        def nameComplete = record.value(ALATerm.nameComplete)
+        def nameFormatted = record.value(ALATerm.nameFormatted)
+        def scientificName = record.value(DwcTerm.scientificName)
+        def scientificNameAuthorship = record.value(DwcTerm.scientificNameAuthorship)
+        def taxonRank = doc["rank"]
         doc["nameComplete"] = buildNameComplete(nameComplete, scientificName, scientificNameAuthorship, nomenclaturalStatus)
         doc["nameFormatted"] = buildNameFormatted(nameFormatted, nameComplete, scientificName, scientificNameAuthorship, taxonRank, taxonRanks, nomenclaturalStatus)
 
@@ -606,7 +648,8 @@ class ImportService extends au.org.ala.bie.ImportService{
     //work and retrieval of the method clearFieldValues obtained from the legacy fork) or reimplement using the new
     //ALA version as an example
     def importOccurrenceDataForPlaces(Boolean online = false, Boolean forRegionFeatured = true) throws Exception {
-        throw new UnsupportedOperationException()
+        log("Operation not supported...")
+        return
 //        String nationalSpeciesDatasets = grailsApplication.config.nationalSpeciesDatasets // comma separated String
 //        def pageSize = 10000
 //        def paramsMap = [
