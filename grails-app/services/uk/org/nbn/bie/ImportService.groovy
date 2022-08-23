@@ -7,6 +7,7 @@ import au.org.ala.vocab.ALATerm
 import grails.async.PromiseList
 import grails.converters.JSON
 import groovy.json.JsonSlurper
+import org.apache.commons.io.IOUtils
 import org.apache.solr.common.params.MapSolrParams
 import org.gbif.dwc.terms.DwcTerm
 import org.gbif.dwca.record.Record
@@ -208,7 +209,7 @@ class ImportService extends au.org.ala.bie.ImportService{
                         }
                     }
 
-                    batch << doc
+                    //batch << doc //this doc is created in importRegions -> importLayer (although it seems to get deleted at the beginning of importLocalities)
 
                     //START featuredRegionLayer (BBG) specific
                     def doc2 = doc.findAll {it.key != "idxtype"}
@@ -587,14 +588,13 @@ class ImportService extends au.org.ala.bie.ImportService{
     String buildNameFormatted(String nameFormatted, String nameComplete, String scientificName,
                               String scientificNameAuthorship, String rank, Map rankMap, String nomenclaturalStatus = "") {
         String name = super.buildNameFormatted(nameFormatted, nameComplete, scientificName, scientificNameAuthorship, rank, rankMap)
-        if (!(nameFormatted || nameComplete)) {
+        if (nomenclaturalStatus && !(nameFormatted || nameComplete)) {
             if (scientificNameAuthorship) {
                 int i = name.lastIndexOf("</span></span>")
-                name = name.replaceAll(/<\/span><\/span>$/, " "+nomenclaturalStatus + "</span></span>")
-            }
-            else if (nomenclaturalStatus) {
+                name = name.replaceAll(/<\/span><\/span>$/, " " + nomenclaturalStatus + "</span></span>")
+            } else {
                 int i = name.lastIndexOf("</span></span>")
-                name = name.replaceAll(/<\/span><\/span>$/, " </span><span class=\"author\">"+nomenclaturalStatus + "</span></span>")
+                name = name.replaceAll(/<\/span><\/span>$/, "</span> <span class=\"author\">" + nomenclaturalStatus + "</span></span>")
             }
         }
 
@@ -786,5 +786,22 @@ class ImportService extends au.org.ala.bie.ImportService{
 //            }
 //            log("waiting for indexing to finish...")
 //        }
+    }
+
+    /**
+     * Helper method to do a HTTP GET and return String content
+     *
+     * @param url
+     * @return
+     */
+    private String getStringForUrl(String url) throws IOException {
+        String output = ""
+        def inStm = new URL(Encoder.encodeUrl(url)).openStream()
+        try {
+            output = IOUtils.toString(inStm)
+        } finally {
+            IOUtils.closeQuietly(inStm)
+        }
+        output
     }
 }

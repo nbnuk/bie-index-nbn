@@ -1,6 +1,7 @@
 package uk.org.nbn.bie
 
 import au.org.ala.web.AlaSecured
+import grails.converters.JSON
 import org.apache.commons.lang.BooleanUtils
 
 @AlaSecured(value = "ROLE_ADMIN", redirectUri = "/")
@@ -53,6 +54,11 @@ class ImportController extends au.org.ala.bie.ImportController{
         def job = execute("importFeaturedRegions", "admin.button.importfeaturedregions", { importService.importFeaturedRegions() })
         asJson (job.status())
 
+    }
+
+    private def asJson = { model ->
+        response.setContentType("application/json;charset=UTF-8")
+        render (model as JSON)
     }
 
 
