@@ -133,8 +133,7 @@ class IndexComparisonTest extends Specification{
     void "test idxtype=COMMON docs"() {
         setup:
         def guidQueryString = "/select?q=*%3A*&fq=idxtype%3ACOMMON&rows=0&fl=taxonGuid&wt=json&indent=true&facet=true&facet.field=taxonGuid"
-        def queryStringA = "/select?fq=idxtype%3ACOMMON&fl=taxonGuid%2Cname&wt=json&indent=true"
-        def queryStringB = "/select?fq=idxtype%3ACOMMON&fl=name&wt=json&indent=true"
+        def queryString = "/select?fq=idxtype%3ACOMMON&fl=taxonGuid%2Cname&wt=json&indent=true&rows=999"
 
         def js = new JsonSlurper()
         def indexLive = js.parseText(solrIndexAQuery(guidQueryString))
@@ -148,7 +147,7 @@ class IndexComparisonTest extends Specification{
 
         guids.each{ taxonGuid ->
             List<String> names = new ArrayList()
-            indexLive = js.parseText(solrIndexAQuery(queryStringA+"&q=taxonGuid:"+taxonGuid))
+            indexLive = js.parseText(solrIndexAQuery(queryString+"&q=taxonGuid:"+taxonGuid))
             indexLive.response.docs.each{doc ->
                 names.add(doc.name)
             }
@@ -160,7 +159,7 @@ class IndexComparisonTest extends Specification{
         expect:
         def j = 0
         guidNameMap.each{
-            indexOffline = js.parseText(solrIndexBQuery(queryStringB+"&q=taxonGuid:"+it.key))
+            indexOffline = js.parseText(solrIndexBQuery(queryString+"&q=taxonGuid:"+it.key))
             indexOffline.response.docs.each{doc ->
                 assert it.value.contains(doc.name)
             }
