@@ -15,12 +15,6 @@ class ImportServiceSpec extends Specification {
     def cleanup() {
     }
 
-    void "test layer not imported if disabled"() {
-        expect:
-        def layer = [enabled:false]
-        service.importLayer(layer) == false
-    }
-
     void "test buildNameComplete if nameComplete provided, nomenclaturalStatus is not added"() {
         expect:
         def nameComplete = service.buildNameComplete("nameComplete", "scientificName", "scientificNameAuthorship", "nomenclaturalStatus")
