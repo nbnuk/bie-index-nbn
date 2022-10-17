@@ -9,6 +9,7 @@ import grails.converters.JSON
 import groovy.json.JsonSlurper
 import org.apache.commons.io.IOUtils
 import org.apache.solr.common.params.MapSolrParams
+import org.apache.commons.lang.StringEscapeUtils
 import org.gbif.dwc.terms.DwcTerm
 import org.gbif.dwca.record.Record
 import org.grails.web.json.JSONObject
@@ -609,10 +610,10 @@ class ImportService extends au.org.ala.bie.ImportService{
         if (nomenclaturalStatus && !(nameFormatted || nameComplete)) {
             if (scientificNameAuthorship) {
                 int i = name.lastIndexOf("</span></span>")
-                name = name.replaceAll(/<\/span><\/span>$/, " " + ${StringEscapeUtils.escapeHtml(nomenclaturalStatus)} + "</span></span>")
+                name = name.replaceAll(/<\/span><\/span>$/, " ${StringEscapeUtils.escapeHtml(nomenclaturalStatus)}</span></span>")
             } else {
                 int i = name.lastIndexOf("</span></span>")
-                name = name.replaceAll(/<\/span><\/span>$/, "</span> <span class=\"author\">" + ${StringEscapeUtils.escapeHtml(nomenclaturalStatus)} + "</span></span>")
+                name = name.replaceAll(/<\/span><\/span>$/, "</span> <span class=\"author\">${StringEscapeUtils.escapeHtml(nomenclaturalStatus)}</span></span>")
             }
         }
 
