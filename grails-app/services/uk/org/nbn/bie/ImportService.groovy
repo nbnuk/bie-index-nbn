@@ -609,10 +609,10 @@ class ImportService extends au.org.ala.bie.ImportService{
         if (nomenclaturalStatus && !(nameFormatted || nameComplete)) {
             if (scientificNameAuthorship) {
                 int i = name.lastIndexOf("</span></span>")
-                name = name.replaceAll(/<\/span><\/span>$/, " " + nomenclaturalStatus + "</span></span>")
+                name = name.replaceAll(/<\/span><\/span>$/, " " + ${StringEscapeUtils.escapeHtml(nomenclaturalStatus)} + "</span></span>")
             } else {
                 int i = name.lastIndexOf("</span></span>")
-                name = name.replaceAll(/<\/span><\/span>$/, "</span> <span class=\"author\">" + nomenclaturalStatus + "</span></span>")
+                name = name.replaceAll(/<\/span><\/span>$/, "</span> <span class=\"author\">" + ${StringEscapeUtils.escapeHtml(nomenclaturalStatus)} + "</span></span>")
             }
         }
 
