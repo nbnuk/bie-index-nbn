@@ -7,6 +7,12 @@ import spock.lang.Specification
 @Integration
 class IndexComparisonTest extends Specification{
 
+    def INDEX_LIVE_BASE_URL="http://35.157.50.216:8983/solr/bie"
+    def INDEX_OFFLINE_BASE_URL="http://35.157.50.216:8983/solr/bie-offline"
+//    def INDEX_LIVE_BASE_URL=http://localhost:8984/solr/bie
+//    def INDEX_OFFLINE_BASE_URL=http://localhost:8984/solr/bie-offline
+
+
     def grailsApplication
 
     def setup() {
@@ -233,11 +239,11 @@ class IndexComparisonTest extends Specification{
 
 
     private String solrIndexAQuery(String queryString){
-       return  new URL(grailsApplication.config.indexLiveBaseUrl+queryString).getText("UTF-8")
+       return  new URL(INDEX_LIVE_BASE_URL+queryString).getText("UTF-8")
     }
 
     private String solrIndexBQuery(String queryString){
-        return  new URL(grailsApplication.config.indexOfflineBaseUrl+queryString).getText("UTF-8")
+        return  new URL(INDEX_OFFLINE_BASE_URL+queryString).getText("UTF-8")
     }
 
 }

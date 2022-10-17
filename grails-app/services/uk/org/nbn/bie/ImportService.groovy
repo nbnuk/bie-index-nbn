@@ -103,10 +103,28 @@ class ImportService extends au.org.ala.bie.ImportService{
     }
 
     @Override
-    protected def importLayer(layer) {
-        if (!layer.enabled.toBoolean()) {
-            return false;
+    def importRegions() {
+        log "Starting regions import"
+        def js = new JsonSlurper()
+        def layers = js.parseText(new URL(Encoder.encodeUrl(grailsApplication.config.layersServicesUrl + "/layers")).getText("UTF-8"))
+        indexService.deleteFromIndex(IndexDocType.REGION)
+        layers.each { layer ->
+            if (layer.type == "Contextual"  && layer.enabled.toBoolean()) {
+                importLayer(layer)
+            }
         }
+        log"Finished indexing ${layers.size()} region layers"
+        log "Finished regions import"
+
+    }
+
+    @Override
+    protected def importLayer(layer) {
+        //there are layers that are disabled that need to be imported, layer 17 (OS gazateer layer for example (unsed in importLocalities).
+        // NBN introduced disable layer only for importRegions. It doesnt seem right way to do it, but need to leave as is for now
+//        if (!layer.enabled.toBoolean()) {
+//            return false;
+//        }
 
         super.importLayer(layer);
         return true;
