@@ -22,6 +22,10 @@ grails:
             events: false
     cors:
         enabled: true
+logging:
+    config:
+        - file:///data/bie-index/config/logback.groovy
+        #can use an environment variable: export LOGGING_CONFIG=/Users/me/config/logback.groovy
 info:
     app:
         name: '@info.app.name@'
