@@ -64,7 +64,8 @@ class IndexComparisonTest extends Specification{
         println("offline idxtype")
         println(offline)
 
-
+        println("** NOTE: if number is different, check with registry for current number of DataResources etc")
+        println("** https://registry.nbnatlas.org/reports/list")
         expect:
         live.size() == offline.size()
         live.each{
@@ -185,7 +186,7 @@ class IndexComparisonTest extends Specification{
 
     void "test denormalised TAXON docs"() {
         setup:
-        def queryString = "/select?q=denormalised_b%3Atrue&fq=idxtype%3ATAXON&rows=1&fl=guid%2CspeciesGroup%2CspeciesSubgroup%2Csynonym%2CsynonymComplete%2Cdenormalised_b&wt=json&indent=true"
+        def queryString = "/select?q=denormalised_b%3Atrue&fq=idxtype%3ATAXON&rows=999&fl=guid%2CspeciesGroup%2CspeciesSubgroup%2Csynonym%2CsynonymComplete%2Cdenormalised_b&wt=json&indent=true"
         def queryStringB = "/select?fq=idxtype%3ATAXON&rows=1&fl=speciesGroup%2CspeciesSubgroup%2Csynonym%2CsynonymComplete%2Cdenormalised_b&wt=json&indent=true"
 
         when:
