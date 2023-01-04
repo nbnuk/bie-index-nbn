@@ -114,6 +114,7 @@ if (Environment.isDevelopmentMode()) {
                     //'org.apache.http.headers',
                     //'org.apache.http.wire',
                     //'org.hibernate.SQL',
+                    'au.org.ala',
                     'au.org.ala.bie',
                     'uk.org.nbn.bie'
             ],

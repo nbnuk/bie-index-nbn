@@ -104,7 +104,7 @@ class ImportService extends au.org.ala.bie.ImportService{
     }
 
     @Override
-    def importRegions() {
+    def importRegions(boolean online) {
         log "Starting regions import"
         def js = new JsonSlurper()
         def layers = js.parseText(new URL(Encoder.encodeUrl(grailsApplication.config.layersServicesUrl + "/layers")).getText("UTF-8"))
@@ -120,7 +120,7 @@ class ImportService extends au.org.ala.bie.ImportService{
     }
 
     @Override
-    protected def importLayer(layer) {
+    protected def importLayer(layer, boolean online) {
         //there are layers that are disabled that need to be imported, layer 17 (OS gazateer layer for example (unsed in importLocalities).
         // NBN introduced disable layer only for importRegions. It doesnt seem right way to do it, but need to leave as is for now
 //        if (!layer.enabled.toBoolean()) {
@@ -629,7 +629,6 @@ class ImportService extends au.org.ala.bie.ImportService{
      * @param updateDocs
      * @return
      */
-    @Override
     def indexDocInQueue(Queue updateDocs, msg, Boolean online = false) {
         int batchSize = 1000
 

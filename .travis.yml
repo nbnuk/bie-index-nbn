@@ -1,14 +1,12 @@
-install: gradle wrapper --gradle-version 4.2
 language: groovy
 jdk:
 - oraclejdk8
 sudo: false
-dist: trusty
 branches:
   only:
   - master
   - develop
-  - FFTF
+  - upgrade-1.8.2
 before_cache:
 - rm -f  $HOME/.gradle/caches/modules-2/modules-2.lock
 - rm -fr $HOME/.gradle/caches/*/plugin-resolution/

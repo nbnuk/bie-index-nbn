@@ -1,14 +1,9 @@
 package uk.org.nbn.bie
 
-import grails.test.mixin.TestFor
-import org.aspectj.asm.IModelFilter
+import grails.testing.services.ServiceUnitTest
 import spock.lang.Specification
 
-/**
- * See the API for {@link grails.test.mixin.services.ServiceUnitTestMixin} for usage instructions
- */
-@TestFor(SearchService)
-class SearchServiceSpec extends Specification {
+class SearchServiceSpec extends Specification implements ServiceUnitTest<au.org.ala.bie.SearchService> {
 
     def setup() {
     }

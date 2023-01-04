@@ -2,7 +2,6 @@ package uk.org.nbn.bie
 
 import au.org.ala.bie.search.IndexDocType
 import au.org.ala.bie.util.Encoder
-import grails.transaction.Transactional
 import groovy.json.JsonSlurper
 
 
@@ -15,7 +14,7 @@ class SearchService extends au.org.ala.bie.SearchService{
      * @return
      */
     @Override
-    protected def lookupTaxonByName(String taxonName, Boolean useOfflineIndex = false){
+     def lookupTaxonByName(String taxonName, String kingdom, Boolean useOfflineIndex = false){
         def indexServerUrlPrefix = grailsApplication.config.indexLiveBaseUrl
         if (useOfflineIndex) {
             indexServerUrlPrefix = grailsApplication.config.indexOfflineBaseUrl
@@ -53,7 +52,7 @@ class SearchService extends au.org.ala.bie.SearchService{
     }
 
     @Override
-    def getTaxon(taxonLookup) {
+    def getTaxon(taxonLookup, List<Locale> locales) {
         def model = super.getTaxon(taxonLookup)
 
         getTaxonExtra(model)

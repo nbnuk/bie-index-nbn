@@ -1,13 +1,9 @@
 package uk.org.nbn.bie.places
 
-import grails.test.mixin.TestFor
+import grails.testing.services.ServiceUnitTest
 import spock.lang.Specification
 
-/**
- * See the API for {@link grails.test.mixin.services.ServiceUnitTestMixin} for usage instructions
- */
-@TestFor(PlacesAutoCompleteService)
-class PlacesAutoCompleteServiceSpec extends Specification {
+class PlacesAutoCompleteServiceSpec extends Specification implements ServiceUnitTest<PlacesAutoCompleteService> {
 
     def setup() {
     }

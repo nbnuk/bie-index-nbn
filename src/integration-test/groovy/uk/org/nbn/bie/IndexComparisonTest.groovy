@@ -1,10 +1,10 @@
 package uk.org.nbn.bie
 
-import grails.test.mixin.integration.Integration
+//import grails.test.mixin.integration.Integration
 import groovy.json.JsonSlurper
 import spock.lang.Specification
 
-@Integration
+//@Integration
 class IndexComparisonTest extends Specification{
 
     def INDEX_LIVE_BASE_URL="http://35.157.50.216:8983/solr/bie"

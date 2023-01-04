@@ -1,13 +1,9 @@
 package uk.org.nbn.bie
 
-import grails.test.mixin.TestFor
+import grails.testing.services.ServiceUnitTest
 import spock.lang.Specification
 
-/**
- * See the API for {@link grails.test.mixin.services.ServiceUnitTestMixin} for usage instructions
- */
-@TestFor(ImportService)
-class ImportServiceSpec extends Specification {
+class ImportServiceSpec extends Specification implements ServiceUnitTest<au.org.ala.bie.ImportService>{
 
     def setup() {
     }
