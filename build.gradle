@@ -8,7 +8,7 @@ buildscript {
     }
     dependencies {
         classpath "org.grails:grails-gradle-plugin:$grailsVersion"
-        classpath "com.bertramlabs.plugins:asset-pipeline-gradle:2.14.1"
+        classpath "com.bertramlabs.plugins:asset-pipeline-gradle:3.2.4"
     }
 }
 
@@ -20,7 +20,7 @@ apply plugin:"idea"
 apply plugin:"war"
 apply plugin:"org.grails.grails-web"
 apply plugin:"org.grails.grails-gsp"
-apply plugin:"asset-pipeline"
+apply plugin:"com.bertramlabs.asset-pipeline"
 apply plugin:"maven-publish"
 
 //apply from: 'https://raw.githubusercontent.com/nbnuk/travis-build-configuration/master/travis_grails_publish.gradle'
@@ -123,17 +123,25 @@ dependencies {
         compile "au.org.ala:bie-index:1.8.2-NBN-0-0-0-SNAPSHOT"
     }
 
-    compile 'org.grails.plugins:external-config:2.0.0'
+//    compile 'org.grails.plugins:external-config:2.0.0'
     runtime "org.grails.plugins:ala-bootstrap3:4.1.0"
-    compile "org.grails.plugins:ala-ws-security-plugin:4.1.1"
-    compile "org.grails.plugins:ala-ws-plugin:3.1.1"
-    compile "org.grails.plugins:ala-auth:5.1.1"
+//    compile ("org.grails.plugins:ala-ws-security-plugin:4.1.1"){
+//        exclude group: 'com.google.guava', module: 'guava'
+//    }
+//    compile "org.grails.plugins:ala-ws-plugin:3.1.1"
+//    compile "org.grails.plugins:ala-auth:5.1.1"
 
 //    runtime "com.h2database:h2"
 //    testCompile "org.grails:grails-plugin-testing"
 //    testCompile "org.grails.plugins:geb"
 //    testRuntime "org.seleniumhq.selenium:selenium-htmlunit-driver:3.14.0"
 //    testRuntime "net.sourceforge.htmlunit:htmlunit:2.18"
+}
+
+configurations.all {
+    resolutionStrategy {
+        force 'com.google.guava:guava:19.0'
+    }
 }
 
 bootRun {

@@ -15,9 +15,9 @@ class SearchService extends au.org.ala.bie.SearchService{
      */
     @Override
      def lookupTaxonByName(String taxonName, String kingdom, Boolean useOfflineIndex = false){
-        def indexServerUrlPrefix = grailsApplication.config.indexLiveBaseUrl
+        def indexServerUrlPrefix = grailsApplication.config.solr.live.connection
         if (useOfflineIndex) {
-            indexServerUrlPrefix = grailsApplication.config.indexOfflineBaseUrl
+            indexServerUrlPrefix = grailsApplication.config.solr.offline.connection
         }
         def solrServerUrl = indexServerUrlPrefix + "/select?wt=json&q=" +
                 "commonNameExact:\"" + taxonName + "\" OR scientificName:\"" + taxonName + "\" OR exact_text:\"" + taxonName + "\"" + // exact_text added to handle case differences in query vs index
@@ -38,7 +38,7 @@ class SearchService extends au.org.ala.bie.SearchService{
      */
 
     def lookupSynonyms(String taxonID, Boolean useOfflineIndex = false){
-        def indexServerUrlPrefix = useOfflineIndex ? grailsApplication.config.indexOfflineBaseUrl : grailsApplication.config.indexLiveBaseUrl
+        def indexServerUrlPrefix = useOfflineIndex ? grailsApplication.config.solr.offline.connection : grailsApplication.config.solr.live.connection
         def encID = URLEncoder.encode(taxonID, 'UTF-8')
 
         def synonymQueryUrl = indexServerUrlPrefix + "/select?wt=json&q=" +

@@ -36,9 +36,9 @@ class PlacesAutoCompleteService{
 
         String queryUrl
 //        if (otherParams[0]?.contains("REGIONFEATURED")) {
-            queryUrl = grailsApplication.config.indexLiveBaseUrl + "/suggest_region_featured?" + query.join('&')
+            queryUrl = grailsApplication.config.solr.live.connection + "/suggest_region_featured?" + query.join('&')
 //        } else {
-//            queryUrl = grailsApplication.config.indexLiveBaseUrl + "/suggest?" + query.join('&')
+//            queryUrl = grailsApplication.config.solr.live.connection + "/suggest?" + query.join('&')
 //        }
         log.debug "queryUrl = |${queryUrl}|"
         def queryResponse = new URL(Encoder.encodeUrl(queryUrl)).getText("UTF-8")

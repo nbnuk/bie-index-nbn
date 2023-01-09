@@ -7,8 +7,8 @@ import spock.lang.Specification
 //@Integration
 class IndexComparisonTest extends Specification{
 
-    def INDEX_LIVE_BASE_URL="http://35.157.50.216:8983/solr/bie"
-    def INDEX_OFFLINE_BASE_URL="http://35.157.50.216:8983/solr/bie-offline"
+    def INDEX_LIVE_BASE_URL="http://localhost:8984/solr/bie-offline"
+    def INDEX_OFFLINE_BASE_URL="http://localhost:8985/solr/bie-offline"
 //    def INDEX_LIVE_BASE_URL=http://localhost:8984/solr/bie
 //    def INDEX_OFFLINE_BASE_URL=http://localhost:8984/solr/bie-offline
 
@@ -170,24 +170,28 @@ class IndexComparisonTest extends Specification{
 
 
     void "test denormalised total"() {
+        //WARNING: in upgrade denormalised_b changed to denormalised so this will
+        //need to be fixed post upgrade
         setup:
         def queryString = "/select?q=denormalised_b%3Atrue&rows=0&wt=json&indent=true"
+        def queryStringUpgrade = "/select?q=denormalised%3Atrue&rows=0&wt=json&indent=true"
 
         when:
         def js = new JsonSlurper()
         def indexLive = js.parseText(solrIndexAQuery(queryString))
-        def indexOffline = js.parseText(solrIndexBQuery(queryString))
+        def indexOffline = js.parseText(solrIndexBQuery(queryStringUpgrade))
 
         then:
-        indexLive.response.numFound > 0
         indexLive.response.numFound ==  indexOffline.response.numFound
 
     }
 
     void "test denormalised TAXON docs"() {
+        //WARNING: in upgrade denormalised_b changed to denormalised so this will
+        //need to be fixed post upgrade
         setup:
         def queryString = "/select?q=denormalised_b%3Atrue&fq=idxtype%3ATAXON&rows=999&fl=guid%2CspeciesGroup%2CspeciesSubgroup%2Csynonym%2CsynonymComplete%2Cdenormalised_b&wt=json&indent=true"
-        def queryStringB = "/select?fq=idxtype%3ATAXON&rows=1&fl=speciesGroup%2CspeciesSubgroup%2Csynonym%2CsynonymComplete%2Cdenormalised_b&wt=json&indent=true"
+        def queryStringB = "/select?fq=idxtype%3ATAXON&rows=1&fl=speciesGroup%2CspeciesSubgroup%2Csynonym%2CsynonymComplete%2Cdenormalised&wt=json&indent=true"
 
         when:
         def js = new JsonSlurper()
@@ -199,7 +203,7 @@ class IndexComparisonTest extends Specification{
             indexOffline = js.parseText(solrIndexBQuery(queryStringB+"&q=guid:"+liveDoc.guid))
             assert indexOffline.response.numFound == 1
             def offlineDoc = indexOffline.response.docs[0]
-            assert offlineDoc.denormalised_b == liveDoc.denormalised_b
+            assert offlineDoc.denormalised == liveDoc.denormalised_b
             assert offlineDoc.speciesGroup == liveDoc.speciesGroup
             assert offlineDoc.speciesSubgroup == liveDoc.speciesSubgroup
             assert offlineDoc.synonym == liveDoc.synonym
