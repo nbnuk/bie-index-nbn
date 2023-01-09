@@ -245,7 +245,7 @@ solr:
         qAlt: text:*
         hl:
             hl: true
-            fl: "*"
+            fl: "*,score"
             simple:
                 pre: <b>
                 post: </b>
