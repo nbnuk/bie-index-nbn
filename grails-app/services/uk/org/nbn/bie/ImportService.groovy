@@ -21,71 +21,17 @@ import java.util.zip.GZIPInputStream
 
 class ImportService extends au.org.ala.bie.ImportService{
 
-    /**
-     * Removes field values from all records in index
-     * @param fld
-     * @throws Exception
-     */
-    def clearFieldValues(String fld) throws Exception {
-        try {
-            clearFieldValues(fld, "", false)
-        } catch (Exception ex) {
-            log.warn "Error clearing occurrenceCounts: ${ex.message}", ex
-        }
-    }
-    /**
-     * Removes field values from records in index matching the provided fq
-     * @param fld
-     * @param fq
-     * @throws Exception
-     */
-    def clearFieldValues(String fld, String fq, Boolean online) throws Exception {
-        int page = 1
-        int pageSize = 1000
-        def js = new JsonSlurper()
-        def baseUrl = online ? grailsApplication.config.indexLiveBaseUrl : grailsApplication.config.indexOfflineBaseUrl
+    def grailsApplication
 
-        try {
-            while (true) {
-                def solrServerUrl = baseUrl + "/select?wt=json&q=*:*&fq=" + fld + ":[*+TO+*]&start=0&rows=" + pageSize //note, always start at 0 since getting rid of all values
-                if (fq != "") solrServerUrl = solrServerUrl + "&fq=" + fq
-                log.info("SOLR clear field URL: " + solrServerUrl)
-                def queryResponse = Encoder.encodeUrl(solrServerUrl).toURL().getText("UTF-8")
-                def json = js.parseText(queryResponse)
-                int total = json.response.numFound
-                def docs = json.response.docs
-                def buffer = []
 
-                if (docs.isEmpty())
-                    break
-                docs.each { doc ->
-                    def update = [:]
-                    Map<String, String> partialUpdateNull = new HashMap<String, String>();
-                    partialUpdateNull.put("set", null);
-                    update["id"] = doc.id // doc key
-                    update["idxtype"] = ["set": doc.idxtype] // required field
-                    update["guid"] = ["set": doc.guid] // required field
-                    update[fld] = partialUpdateNull
-                    buffer << update
-                }
-                if (!buffer.isEmpty()) {
-                    log.info("Committing cleared fields to SOLR: #" + page.toString() + " set of " + pageSize.toString() + " records")
-                    indexService.indexBatch(buffer, online)
-                }
-                page++
-            }
-        } catch (Exception ex) {
-            log.error("Unable to clear field " + fld + " values ", ex)
-            log("Error: " + ex.getMessage())
-        }
-    }
+
 
     def importFeaturedRegions() {
-        log ("Starting featured regions import "+grailsApplication.config.regionFeaturedLayerIds)
+        super.log "Starting featured regions import "+grailsApplication.config.regionFeaturedLayerIds
         String[] regionFeaturedIds
         if(grailsApplication.config.regionFeaturedLayerIds) {
             regionFeaturedIds = grailsApplication.config.regionFeaturedLayerIds.split(',')
-            log("Featured regions = " + regionFeaturedIds.toString())
+            super.log "Featured regions = " + regionFeaturedIds.toString()
         }
 
         def layers = getLayers()
@@ -95,27 +41,27 @@ class ImportService extends au.org.ala.bie.ImportService{
                 importFeaturedRegionLayer(layer)
             }
         }
-        log "Finished featured regions import"
+        super.log "Finished featured regions import"
     }
 
     protected getLayers() {
         def js = new JsonSlurper()
-        js.parseText(new URL(Encoder.encodeUrl(grailsApplication.config.layersServicesUrl + "/layers")).getText("UTF-8"))
+        js.parseText(new URL(Encoder.encodeUrl(grailsApplication.config.layers.service + "/layers")).getText("UTF-8"))
     }
 
     @Override
     def importRegions(boolean online) {
-        log "Starting regions import"
+        super.log"Starting regions import"
         def js = new JsonSlurper()
-        def layers = js.parseText(new URL(Encoder.encodeUrl(grailsApplication.config.layersServicesUrl + "/layers")).getText("UTF-8"))
-        indexService.deleteFromIndex(IndexDocType.REGION)
+        def layers = js.parseText(new URL(Encoder.encodeUrl(grailsApplication.config.layers.service + "/layers")).getText("UTF-8"))
+        indexService.deleteFromIndex(IndexDocType.REGION, online)
         layers.each { layer ->
             if (layer.type == "Contextual"  && layer.enabled.toBoolean()) {
-                importLayer(layer)
+                importLayer(layer, online)
             }
         }
-        log"Finished indexing ${layers.size()} region layers"
-        log "Finished regions import"
+        super.log"Finished indexing ${layers.size()} region layers"
+        super.log"Finished regions import"
 
     }
 
@@ -127,14 +73,26 @@ class ImportService extends au.org.ala.bie.ImportService{
 //            return false;
 //        }
 
-        super.importLayer(layer);
+        super.importLayer(layer, online);
         return true;
+    }
+
+    @Override
+    def importWordPressPages(boolean online) throws Exception {
+        super.log "Starting wordpress import"
+        if (!grailsApplication.config.wordPress.sitemap) {
+            indexService.deleteFromIndex(IndexDocType.WORDPRESS, online)
+            super.log "Finished. Nothing to import"
+            return
+        } else{
+            super.importWordPressPages(online)
+        }
     }
 
     protected def importFeaturedRegionLayer(layer) {
         if (!isFeaturedRegionLayer(layer))
             return false;
-        log("Loading featured regions from layer " + layer.name + " (" + layer.id + ")")
+        super.log"Loading featured regions from layer " + layer.name + " (" + layer.id + ")"
 
         def keywords = []
 
@@ -143,7 +101,7 @@ class ImportService extends au.org.ala.bie.ImportService{
         }
 
         def tempFilePath = "/tmp/objects_${layer.id}.csv.gz"
-        def url = grailsApplication.config.layersServicesUrl + "/objects/csv/cl" + layer.id
+        def url = grailsApplication.config.layers.service + "/objects/csv/cl" + layer.id
         def file = new File(tempFilePath).newOutputStream()
         file << new URL(Encoder.encodeUrl(url)).openStream()
         file.flush()
@@ -296,7 +254,7 @@ class ImportService extends au.org.ala.bie.ImportService{
         ]
 
         try {
-            clearFieldValues("speciesCount", "idxtype:REGIONFEATURED", online)
+            clearField("speciesCount", null, online, ["idxtype:REGIONFEATURED"])
         } catch (Exception ex) {
             log.warn "Error clearing speciesCounts: ${ex.message}", ex
         }
@@ -307,10 +265,10 @@ class ImportService extends au.org.ala.bie.ImportService{
         countMap.rows = 0
         countMap.remove("cursorMark")
         def searchCount = searchService.getCursorSearchResults(new MapSolrParams(countMap), !online) // could throw exception
-        def totalDocs = searchCount?.response?.numFound?:0
+        def totalDocs = searchCount.results.numFound
         int totalPages = (totalDocs + pageSize - 1) / pageSize
         log.debug "Featured Region - totalDocs = ${totalDocs} || totalPages = ${totalPages}"
-        log("Processing " + String.format("%,d", totalDocs) + " places (via ${paramsMap.q})...<br>")
+        super.log"Processing " + String.format("%,d", totalDocs) + " places (via ${paramsMap.q})...<br>"
         // send to browser
 
         def promiseList = new PromiseList() // for biocache queries
@@ -326,7 +284,7 @@ class ImportService extends au.org.ala.bie.ImportService{
                 MapSolrParams solrParams = new MapSolrParams(paramsMap)
                 log.debug "${page}. paramsMap = ${paramsMap}"
                 def searchResults = searchService.getCursorSearchResults(solrParams, !online) // use offline or online index to search
-                def resultsDocs = searchResults?.response?.docs?:[]
+                def resultsDocs = searchResults?.results?:[]
 
 
                 // buckets to group results into
@@ -337,7 +295,7 @@ class ImportService extends au.org.ala.bie.ImportService{
                     placesToSearchSpecies.add(doc)
                 }
                 promiseList << { searchSpeciesCountsForPlaces(resultsDocs, commitQueue) }
-                log("${page}. placesToSearchSpecies = ${placesToSearchSpecies.size()}")
+                super.log"${page}. placesToSearchSpecies = ${placesToSearchSpecies.size()}"
 
 
                 // update cursor
@@ -347,19 +305,19 @@ class ImportService extends au.org.ala.bie.ImportService{
 
             } catch (Exception ex) {
                 log.warn "Error calling BIE SOLR: ${ex.message}", ex
-                log("ERROR calling SOLR: ${ex.message}")
+                super.log"ERROR calling SOLR: ${ex.message}"
             }
         }
 
-        log("Waiting for all species searches and SOLR commits to finish (could take some time)")
+        super.log"Waiting for all species searches and SOLR commits to finish (could take some time)"
 
         //promiseList.get() // block until all promises are complete
         promiseList.onComplete { List results ->
             //executor.shutdownNow()
             isKeepIndexing = false // stop indexing thread
             executor.shutdown()
-            log("Total places found with species counts = ${results.sum()}")
-            log("waiting for indexing to finish...")
+            super.log"Total places found with species counts = ${results.sum()}"
+            super.log"waiting for indexing to finish..."
         }
     }
 
@@ -419,12 +377,12 @@ class ImportService extends au.org.ala.bie.ImportService{
         int totalPages = ((place_names.size() + batchSize - 1) / batchSize) -1
         log.debug "total = ${place_names.size()} || batchSize = ${batchSize} || totalPages = ${totalPages}"
         List docsWithRecs = [] // docs to index
-        //log("Getting occurrence data for ${docs.size()} docs")
+        //super.log"Getting occurrence data for ${docs.size()} docs"
 
         (0..totalPages).each { index ->
             int start = index * batchSize
             int end = (start + batchSize < place_names.size()) ? start + batchSize : place_names.size()
-            log "paging place biocache search - ${start} to ${end-1}"
+            super.log"paging place biocache search - ${start} to ${end-1}"
             def placeSubset = place_names.subList(start,end)
             //URIUtil.encodeWithinQuery(place).replaceAll("%26","&").replaceAll("%3D","=").replaceAll("%3A",":")
             def placeParamList = placeSubset.collect { String place -> '"' + place + '"' } // URL encode place names
@@ -463,7 +421,7 @@ class ImportService extends au.org.ala.bie.ImportService{
                 }
             } catch (Exception ex) {
                 log.warn "Error calling biocache SOLR: ${ex.message}", ex
-                log("ERROR calling biocache SOLR: ${ex.message}")
+                super.log"ERROR calling biocache SOLR: ${ex.message}"
             }
         }
 
@@ -489,12 +447,12 @@ class ImportService extends au.org.ala.bie.ImportService{
         int totalPages = ((place_names.size() + batchSize - 1) / batchSize) -1
         log.debug "total = ${place_names.size()} || batchSize = ${batchSize} || totalPages = ${totalPages}"
         List docsWithRecs = [] // docs to index
-        //log("Getting occurrence data for ${docs.size()} docs")
+        //super.log"Getting occurrence data for ${docs.size()} docs"
 
         (0..totalPages).each { index ->
             int start = index * batchSize
             int end = (start + batchSize < place_names.size()) ? start + batchSize : place_names.size()
-            log "paging place biocache search - ${start} to ${end-1}"
+            super.log"paging place biocache search - ${start} to ${end-1}"
             def placeSubset = place_names.subList(start,end)
             //URIUtil.encodeWithinQuery(place).replaceAll("%26","&").replaceAll("%3D","=").replaceAll("%3A",":")
             def placeParamList = placeSubset.collect { String place -> '"' + place + '"' } // URL encode place names
@@ -540,7 +498,7 @@ class ImportService extends au.org.ala.bie.ImportService{
                 }
             } catch (Exception ex) {
                 log.warn "Error calling biocache SOLR: ${ex.message}", ex
-                log("ERROR calling biocache SOLR: ${ex.message}")
+                super.log"ERROR calling biocache SOLR: ${ex.message}"
             }
         }
 
@@ -650,14 +608,14 @@ class ImportService extends au.org.ala.bie.ImportService{
                 } catch (Exception ex) {
                     log.warn "Error batch indexing: ${ex.message}", ex
                     log.warn "updateDocs = ${updateDocs}"
-                    log("ERROR batch indexing: ${ex.message} <br><code>${ex.stackTrace}</code>")
+                    super.log"ERROR batch indexing: ${ex.message} <br><code>${ex.stackTrace}</code>"
                 }
             } else {
                 sleep(500)
             }
         }
 
-        log("Indexing thread is done: ${msg}")
+        super.log"Indexing thread is done: ${msg}"
     }
 
 
@@ -666,7 +624,7 @@ class ImportService extends au.org.ala.bie.ImportService{
     //work and retrieval of the method clearFieldValues obtained from the legacy fork) or reimplement using the new
     //ALA version as an example
     def importOccurrenceDataForPlaces(Boolean online = false, Boolean forRegionFeatured = true) throws Exception {
-        log("Operation not supported...")
+        super.log"Operation not supported..."
         return
 //        String nationalSpeciesDatasets = grailsApplication.config.nationalSpeciesDatasets // comma separated String
 //        def pageSize = 10000
@@ -719,15 +677,15 @@ class ImportService extends au.org.ala.bie.ImportService{
 //        countMap.remove("cursorMark")
 //        def searchCount = searchService.getCursorSearchResults(new MapSolrParams(countMap), !online)
 //        // could throw exception
-//        def totalDocs = searchCount?.response?.numFound ?: 0
+//        def totalDocs = searchCount.results.numFound
 //        int totalPages = (totalDocs + pageSize - 1) / pageSize
 //        if (!forRegionFeatured) {
 //            log.debug "totalDocs = ${totalDocs} || totalPages = ${totalPages}"
-//            log("Processing " + String.format("%,d", totalDocs) + " taxa (via ${paramsMap.q})...<br>")
+//            super.log"Processing " + String.format("%,d", totalDocs) + " taxa (via ${paramsMap.q})...<br>"
 //            // send to browser
 //        } else {
 //            log.debug "Featured Region - totalDocs = ${totalDocs} || totalPages = ${totalPages}"
-//            log("Processing " + String.format("%,d", totalDocs) + " places (via ${paramsMap.q})...<br>")
+//            super.log"Processing " + String.format("%,d", totalDocs) + " places (via ${paramsMap.q})...<br>"
 //            // send to browser
 //        }
 //
@@ -765,7 +723,7 @@ class ImportService extends au.org.ala.bie.ImportService{
 //                            // search occurrence records to determine if it is located in host/hub county
 //                        }
 //                    }
-//                    log("${page}. taxaLocatedInHubCountry = ${taxaLocatedInHubCountry.size()} | taxaToSearchOccurrences = ${taxaToSearchOccurrences.size()}")
+//                    super.log"${page}. taxaLocatedInHubCountry = ${taxaLocatedInHubCountry.size()} | taxaToSearchOccurrences = ${taxaToSearchOccurrences.size()}"
 //                    // update national list without occurrence record lookup
 //                    updateTaxaWithLocationInfo(taxaLocatedInHubCountry, commitQueue)
 //                    // update the rest via occurrence search (non blocking via promiseList)
@@ -776,7 +734,7 @@ class ImportService extends au.org.ala.bie.ImportService{
 //                        placesToSearchOccurrences.add(doc) // count occurrence records
 //                    }
 //                    promiseList << { searchOccurrencesWithSampledPlace(resultsDocs, commitQueue) }
-//                    log("${page}. placesToSearchOccurrences = ${placesToSearchOccurrences.size()}")
+//                    super.log"${page}. placesToSearchOccurrences = ${placesToSearchOccurrences.size()}"
 //                }
 //
 //                // update cursor
@@ -786,11 +744,11 @@ class ImportService extends au.org.ala.bie.ImportService{
 //
 //            } catch (Exception ex) {
 //                log.warn "Error calling BIE SOLR: ${ex.message}", ex
-//                log("ERROR calling SOLR: ${ex.message}")
+//                super.log"ERROR calling SOLR: ${ex.message}"
 //            }
 //        }
 //
-//        log("Waiting for all occurrence searches and SOLR commits to finish (could take some time)")
+//        super.log"Waiting for all occurrence searches and SOLR commits to finish (could take some time)"
 //
 //        //promiseList.get() // block until all promises are complete
 //        promiseList.onComplete { List results ->
@@ -798,11 +756,11 @@ class ImportService extends au.org.ala.bie.ImportService{
 //            isKeepIndexing = false // stop indexing thread
 //            executor.shutdown()
 //            if (!forRegionFeatured) {
-//                log("Total taxa found with occurrence records = ${results.sum()}")
+//                super.log"Total taxa found with occurrence records = ${results.sum()}"
 //            } else {
-//                log("Total places found with occurrence records = ${results.sum()}")
+//                super.log"Total places found with occurrence records = ${results.sum()}"
 //            }
-//            log("waiting for indexing to finish...")
+//            super.log"waiting for indexing to finish..."
 //        }
     }
 
