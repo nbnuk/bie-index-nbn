@@ -3,7 +3,7 @@ package uk.org.nbn.bie
 import grails.testing.services.ServiceUnitTest
 import spock.lang.Specification
 
-class SearchServiceSpec extends Specification implements ServiceUnitTest<au.org.ala.bie.SearchService> {
+class SearchServiceSpec extends Specification implements ServiceUnitTest<uk.org.nbn.bie.SearchService> {
 
     def setup() {
     }
