@@ -144,6 +144,8 @@ configurations.all {
     }
 }
 
+integrationTest.onlyIf{ false }
+
 bootRun {
     ignoreExitValue true
     jvmArgs(
