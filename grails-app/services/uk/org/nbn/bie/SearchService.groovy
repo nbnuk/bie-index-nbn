@@ -21,7 +21,7 @@ class SearchService extends au.org.ala.bie.SearchService{
         }
         def solrServerUrl = indexServerUrlPrefix + "/select?wt=json&q=" +
                 "commonNameExact:\"" + taxonName + "\" OR scientificName:\"" + taxonName + "\" OR exact_text:\"" + taxonName + "\"" + // exact_text added to handle case differences in query vs index
-                (grailsApplication.config?.solr?.bq ? "&" + grailsApplication.config.solr.bq + "&defType=dismax" : "") //use boosting if provided, since the first match will be selected which is otherwise fairly random
+                (grailsApplication.config?.solr?.search?.bq ? "&" + grailsApplication.config.solr.search.bq + "&defType=dismax" : "") //use boosting if provided, since the first match will be selected which is otherwise fairly random
 
         def queryResponse = new URL(Encoder.encodeUrl(solrServerUrl)).getText("UTF-8")
         def js = new JsonSlurper()
@@ -53,7 +53,7 @@ class SearchService extends au.org.ala.bie.SearchService{
 
     @Override
     def getTaxon(taxonLookup, List<Locale> locales) {
-        def model = super.getTaxon(taxonLookup)
+        def model = super.getTaxon(taxonLookup, locales)
 
         getTaxonExtra(model)
 
@@ -93,12 +93,12 @@ class SearchService extends au.org.ala.bie.SearchService{
             docStats.put("occurrenceCount", taxon["occurrenceCount"])
         }
         def jsonSlurper = new JsonSlurper()
-        def AdditionalOccStats = jsonSlurper.parseText(grailsApplication.config?.additionalOccurrenceCountsJSON ?: "[]")
-        AdditionalOccStats.each { stats ->
-            if (taxon.containsKey(stats.solrfield)) {
-                docStats.put(stats.solrfield, taxon[stats.solrfield])
-            }
-        }
+//        def AdditionalOccStats = jsonSlurper.parseText(grailsApplication.config?.additionalOccurrenceCountsJSON ?: "[]")
+//        AdditionalOccStats.each { stats ->
+//            if (taxon.containsKey(stats.solrfield)) {
+//                docStats.put(stats.solrfield, taxon[stats.solrfield])
+//            }
+//        }
 
         model.occurrenceCounts = docStats
     }
