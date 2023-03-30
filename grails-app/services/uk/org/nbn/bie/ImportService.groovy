@@ -3,15 +3,17 @@ package uk.org.nbn.bie
 import au.com.bytecode.opencsv.CSVReader
 import au.org.ala.bie.search.IndexDocType
 import au.org.ala.bie.util.Encoder
+//import au.org.ala.bie.util.TitleCapitaliser
 import au.org.ala.vocab.ALATerm
 import grails.async.PromiseList
 import grails.converters.JSON
 import groovy.json.JsonSlurper
-import org.apache.commons.io.IOUtils
+//import org.apache.commons.io.IOUtils
 import org.apache.solr.common.params.MapSolrParams
 import org.apache.commons.lang.StringEscapeUtils
 import org.gbif.dwc.terms.DwcTerm
 import org.gbif.dwca.record.Record
+//import org.grails.web.json.JSONElement
 import org.grails.web.json.JSONObject
 
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -22,8 +24,7 @@ import java.util.zip.GZIPInputStream
 class ImportService extends au.org.ala.bie.ImportService{
 
     def grailsApplication
-
-
+//    def conservationListsSource
 
 
     def importFeaturedRegions() {
@@ -624,7 +625,7 @@ class ImportService extends au.org.ala.bie.ImportService{
     //work and retrieval of the method clearFieldValues obtained from the legacy fork) or reimplement using the new
     //ALA version as an example
     def importOccurrenceDataForPlaces(Boolean online = false, Boolean forRegionFeatured = true) throws Exception {
-        super.log"Operation not supported..."
+        super.log"Operation not supported anymore..."
         return
 //        String nationalSpeciesDatasets = grailsApplication.config.nationalSpeciesDatasets // comma separated String
 //        def pageSize = 10000
@@ -764,20 +765,287 @@ class ImportService extends au.org.ala.bie.ImportService{
 //        }
     }
 
+
+
     /**
-     * Helper method to do a HTTP GET and return String content
-     *
-     * @param url
-     * @return
+     * Removes field values from all records in index
+     * @param fld
+     * @throws Exception
      */
-    private String getStringForUrl(String url) throws IOException {
-        String output = ""
-        def inStm = new URL(Encoder.encodeUrl(url)).openStream()
-        try {
-            output = IOUtils.toString(inStm)
-        } finally {
-            IOUtils.closeQuietly(inStm)
+//    private def clearFieldValues(String fld) throws Exception {
+//        try {
+//            clearFieldValues(fld, "", false)
+//        } catch (Exception ex) {
+//            log.warn "Error clearing occurrenceCounts: ${ex.message}", ex
+//        }
+//    }
+
+    /**
+     * Removes field values from records in index matching the provided fq
+     * @param fld
+     * @param fq
+     * @throws Exception
+     */
+//    private def clearFieldValues(String fld, String fq, Boolean online) throws Exception {
+//        int page = 1
+//        int pageSize = 1000
+//        def js = new JsonSlurper()
+//        def baseUrl = online ? grailsApplication.config.indexLiveBaseUrl : grailsApplication.config.indexOfflineBaseUrl
+//
+//        try {
+//            while (true) {
+//                def solrServerUrl = baseUrl + "/select?wt=json&q=*:*&fq=" + fld + ":[*+TO+*]&start=0&rows=" + pageSize //note, always start at 0 since getting rid of all values
+//                if (fq != "") solrServerUrl = solrServerUrl + "&fq=" + fq
+//                log.info("SOLR clear field URL: " + solrServerUrl)
+//                def queryResponse = Encoder.encodeUrl(solrServerUrl).toURL().getText("UTF-8")
+//                def json = js.parseText(queryResponse)
+//                int total = json.response.numFound
+//                def docs = json.response.docs
+//                def buffer = []
+//
+//                if (docs.isEmpty())
+//                    break
+//                docs.each { doc ->
+//                    def update = [:]
+//                    Map<String, String> partialUpdateNull = new HashMap<String, String>();
+//                    partialUpdateNull.put("set", null);
+//                    update["id"] = doc.id // doc key
+//                    update["idxtype"] = ["set": doc.idxtype] // required field
+//                    update["guid"] = ["set": doc.guid] // required field
+//                    update[fld] = partialUpdateNull
+//                    buffer << update
+//                }
+//                if (!buffer.isEmpty()) {
+//                    log.info("Committing cleared fields to SOLR: #" + page.toString() + " set of " + pageSize.toString() + " records")
+//                    indexService.indexBatch(buffer, online)
+//                }
+//                page++
+//            }
+//        } catch (Exception ex) {
+//            log.error("Unable to clear field " + fld + " values ", ex)
+//            log("Error: " + ex.getMessage())
+//        }
+//    }
+
+
+    /**
+     * Import and index species lists for:
+     * <ul>
+     *   <li> conservation status </li>
+     *   <li> sensitive ? </li>
+     *   <li> host-pest interactions ? </li>
+     * </ul>
+     * For each taxon in each list, update that taxon's SOLR doc with additional fields
+     * Sophie says this method does not work properly. Secies designations need sorting out.
+     * Meanwhile, the ALA have re-written it and that certainly isnt working either. Therefore
+     * we will stick to the old implementation for now. Hence the method below is copied from the legacy (master) branch,
+     * and so overrides the new implementation in the ALA code.
+     */
+    @Override
+    def importConservationSpeciesLists() throws Exception {
+        def deleteFirst = grailsApplication.config.nbn.conservationListsToDeleteFirst
+        //"listMembership_m_s,riskAssessment_m_s,riskAssessmentImpact_m_s,managementPlans_m_s,listUktag_m_s"; //TODO, read from the ConservationListsSource config conservation-lists.json
+
+        if (deleteFirst) {
+            String[] delFirstFields = deleteFirst.split(',')
+            delFirstFields.each { fld ->
+                super.log("Deleting field contents for: " + fld)
+                clearField(fld, null, false)
+            }
         }
-        output
+        super.importConservationSpeciesLists()
     }
+
+    //BEGIN Legacy importConservationSpeciesLists
+
+//    @Override
+//    def importConservationSpeciesLists() throws Exception {
+//        def speciesListUrl = grailsApplication.config.nbn.speciesList.url
+//        def speciesListParams = grailsApplication.config.nbn.speciesList.params
+//        def defaultSourceField = conservationListsSource.defaultSourceField
+//        def lists = conservationListsSource.lists
+//        Integer listNum = 0
+//        def speciesListInfoUrl = grailsApplication.config?.nbn.speciesListInfo?.url ?: ''
+//        String speciesListName = ''
+//        def deleteFirst = grailsApplication.config.nbn.conservationListsToDeleteFirst //"listMembership_m_s,riskAssessment_m_s,riskAssessmentImpact_m_s,managementPlans_m_s,listUktag_m_s"; //TODO, read from the ConservationListsSource config conservation-lists.json
+//
+//        if (deleteFirst) {
+//            String[] delFirstFields = deleteFirst.split(',')
+//            delFirstFields.each { fld ->
+//                super.log("Deleting field contents for: " + fld)
+//                clearField(fld, null, false)
+//            }
+//        }
+//
+//        lists.each { resource ->
+//            listNum++
+//            this.updateProgressBar(lists.size(), listNum)
+//            String uid = resource.uid
+//            String solrField = resource.field ?: "conservationStatus_s"
+//            String sourceField = resource.sourceField ?: defaultSourceField
+//            String action = resource.action ?: "set"
+//            if (uid && solrField) {
+//                def url = "${speciesListUrl}${uid}${speciesListParams}"
+//                super.log("Loading list from: " + url)
+//                def urlInfo = "${speciesListInfoUrl}${uid}"
+//                try {
+//                    JSONElement json = JSON.parse(getStringForUrl(url))
+//                    if (speciesListInfoUrl) {
+//                        log.info("species list info: " + urlInfo)
+//                        JSONElement jsonInfo = JSON.parse(getStringForUrl(urlInfo))
+//                        speciesListName = jsonInfo.listName
+//                    }
+//                    //this calls the legacy method which is copied and pasted into this class. ALA reimplementation is for NBN.
+//                    updateDocsWithConservationStatus(json, sourceField, solrField, uid, action, speciesListName)
+//                } catch (Exception ex) {
+//                    def msg = "Error calling webservice: ${ex.message}"
+//                    super.log(msg)
+//                    log.warn(msg, ex) // send to user via http socket
+//                }
+//            }
+//        }
+//    }
+//
+//
+//    /**
+//     *  Update TAXON SOLR doc with conservation status info
+//     *  Legacy version called in importConservationSpeciesLists
+//     *  added_for_conservation_lists
+//     *
+//     * @param json
+//     * @param jsonFieldName
+//     * @param SolrFieldName
+//     * @return
+//     */
+//    private updateDocsWithConservationStatus(JSONElement json, String jsonFieldName, String SolrFieldName, String drUid, String action, String speciesListName) {
+//        if (json.size() > 0) {
+//            def totalDocs = json.size()
+//            def buffer = []
+//            def statusMap = vernacularNameStatus()
+//            def legistatedStatusType = statusMap.get("legislated")
+//            def unmatchedTaxaCount = 0
+//
+//            updateProgressBar2(100, 0)
+//            super.log("Updating taxa with ${SolrFieldName}")
+//            json.eachWithIndex { item, i ->
+//                log.debug "item = ${item}"
+//                def taxonDoc
+//
+//                if (item.lsid) {
+//                    taxonDoc = searchService.lookupTaxon(item.lsid, true) // TODO cache call
+//                }
+//
+//                if (!taxonDoc && item.name) {
+//                    taxonDoc = searchService.lookupTaxonByName(item.name, null,true) // TODO cache call
+//                }
+//
+//                if (taxonDoc) {
+//                    // do a SOLR doc (atomic) update
+//                    def doc = [:]
+//                    doc["id"] = taxonDoc.id // doc key
+//                    doc["idxtype"] = ["set": taxonDoc.idxtype] // required field
+//                    doc["guid"] = ["set": taxonDoc.guid] // required field
+//                    def fieldVale
+//                    if (jsonFieldName == "*") { //note membership of list itself, rather than specific list field value
+//                        if (speciesListName) {
+//                            fieldVale = speciesListName
+//                        } else {
+//                            fieldVale = drUid
+//                        }
+//                    } else {
+//                        fieldVale = item.kvpValues.find { it.key == jsonFieldName }?.get("value")
+//                    }
+//                    if (action == "set") {
+//                        doc[SolrFieldName] = ["set": fieldVale]
+//                    } else if (action == "add") {
+//                        ArrayList<String> existingVals = taxonDoc[SolrFieldName]
+//                        if (!existingVals) {
+//                            doc[SolrFieldName] = ["set": fieldVale]
+//                        } else {
+//                            if (!existingVals.contains(fieldVale)) existingVals << fieldVale
+//                            doc[SolrFieldName] = ["set": existingVals]
+//                        }
+//                    }
+//                    log.debug "adding to doc = ${doc}"
+//                    buffer << doc
+//                } else {
+//                    // No match so add it as a vernacular name
+//                    def capitaliser = TitleCapitaliser.create(grailsApplication.config.nbn.commonNameDefaultLanguage)
+//                    def doc = [:]
+//                    doc["id"] = UUID.randomUUID().toString() // doc key
+//                    doc["idxtype"] = IndexDocType.TAXON.name() // required field - should be IndexDocType.COMMON??? RR ****
+//                    doc["guid"] = "ALA_${item.name?.replaceAll("[^A-Za-z0-9]+", "_")}" // replace non alpha-numeric chars with '_' - required field
+//                    doc["datasetID"] = drUid
+//                    doc["datasetName"] = "Conservation list for ${SolrFieldName}"
+//                    doc["name"] = capitaliser.capitalise(item.name)
+//                    doc["status"] = legistatedStatusType?.status ?: "legistated"
+//                    doc["priority"] = legistatedStatusType?.priority ?: 500
+//                    // set conservationStatus facet
+//                    def fieldVale = item.kvpValues.find { it.key == jsonFieldName }?.get("value")
+//                    doc[SolrFieldName] = fieldVale
+//                    log.debug "new name doc = ${doc}"
+//                    buffer << doc
+//                    super.log("No existing taxon found for ${item.name}, so has been added as ${doc["guid"]}")
+//                }
+//
+//                if (i > 0) {
+//                    updateProgressBar2(totalDocs, i)
+//                }
+//            }
+//
+//            super.log("Committing to SOLR...")
+//            indexService.indexBatch(buffer)
+//            updateProgressBar2(100, 100)
+//            super.log("Number of taxa unmatched: ${unmatchedTaxaCount}")
+//            super.log("Import finished.")
+//        } else {
+//            super.log("JSON not an array or has no elements - exiting")
+//        }
+//    }
+//
+//    /**
+//     * Get vernacular name information
+//     * added_for_conservation_lists
+//     */
+//    def vernacularNameStatus() {
+//        URL source = this.class.getResource("/vernacularNameStatus.json")
+//        JsonSlurper slurper = new JsonSlurper()
+//        def ranks = slurper.parse(source)
+//        def idMap = [:]
+//        def iter = ranks.iterator()
+//        while (iter.hasNext()) {
+//            def entry = iter.next()
+//            idMap.put(entry.status, entry)
+//        }
+//        idMap
+//    }
+//
+//    /**
+//     * Helper method to do a HTTP GET and return String content
+//     *
+//     * @param url
+//     * @return
+//     */
+//    private String getStringForUrl(String url) throws IOException {
+//        return getStringForUrl(new URL(url))
+//    }
+//
+//    /**
+//     * Helper method to do a HTTP GET and return String content
+//     *
+//     * @param url
+//     * @return
+//     */
+//    private String getStringForUrl(URL url) throws IOException {
+//        String output = ""
+//        def inStm = url.openStream()
+//        try {
+//            output = IOUtils.toString(inStm)
+//        } finally {
+//            IOUtils.closeQuietly(inStm)
+//        }
+//        output
+//    }
+
+    //END Legacy importConservationSpeciesLists
 }
