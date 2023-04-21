@@ -2,6 +2,7 @@ import au.org.ala.bie.solr.SolrClientBean
 import org.apache.solr.client.solrj.impl.ConcurrentUpdateSolrClient
 import org.apache.solr.client.solrj.impl.HttpSolrClient
 import au.org.ala.bie.util.ConservationListsSource
+import uk.org.nbn.bie.util.ConservationListsSourceDecorator
 
 beans = {
     liveSolrClient(SolrClientBean,
@@ -25,6 +26,6 @@ beans = {
             application.config.solr.updatingLive.threadCount as Integer,
             application.config.solr.updatingLive.timeout as Integer
     )
-    conservationListsSource(ConservationListsSource, application.config.conservationListsUrl)
+    conservationListsSource(ConservationListsSourceDecorator, application.config.conservationListsUrl)
 }
 

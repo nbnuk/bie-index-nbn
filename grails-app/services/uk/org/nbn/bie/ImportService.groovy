@@ -24,8 +24,6 @@ import java.util.zip.GZIPInputStream
 class ImportService extends au.org.ala.bie.ImportService{
 
     def grailsApplication
-//    def conservationListsSource
-
 
     def importFeaturedRegions() {
         super.log "Starting featured regions import "+grailsApplication.config.regionFeaturedLayerIds
@@ -843,16 +841,12 @@ class ImportService extends au.org.ala.bie.ImportService{
      */
     @Override
     def importConservationSpeciesLists() throws Exception {
-        def deleteFirst = grailsApplication.config.nbn.conservationListsToDeleteFirst
-        //"listMembership_m_s,riskAssessment_m_s,riskAssessmentImpact_m_s,managementPlans_m_s,listUktag_m_s"; //TODO, read from the ConservationListsSource config conservation-lists.json
 
-        if (deleteFirst) {
-            String[] delFirstFields = deleteFirst.split(',')
-            delFirstFields.each { fld ->
-                super.log("Deleting field contents for: " + fld)
-                clearField(fld, null, false)
-            }
+        conservationListsSource.deleteFirst.each { fld ->
+            super.log("Deleting field contents for: " + fld)
+            clearField(fld, null, false)
         }
+
         super.importConservationSpeciesLists()
     }
 
