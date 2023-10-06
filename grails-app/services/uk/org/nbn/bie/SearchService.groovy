@@ -55,12 +55,13 @@ class SearchService extends au.org.ala.bie.SearchService{
     def getTaxon(taxonLookup, List<Locale> locales) {
         def model = super.getTaxon(taxonLookup, locales)
 
-        getTaxonExtra(model)
+        if (model) {
+            getTaxonExtra(model)
 
-        addOccurrenceCountsToTaxonModel(model, super.lookupTaxon(model.taxonConcept.guid))
+            addOccurrenceCountsToTaxonModel(model, super.lookupTaxon(model.taxonConcept.guid))
+        }
 
         model
-
     }
 
     /**
