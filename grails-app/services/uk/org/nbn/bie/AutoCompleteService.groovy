@@ -15,7 +15,7 @@ class AutoCompleteService extends au.org.ala.bie.AutoCompleteService{
 
     def placesAutoCompleteService;
 
-    @Override
+//    @Override
     List auto(String q, List otherParams) {
         if (!otherParams[0]?.contains("REGIONFEATURED")) {
             super.autoSuggest(q, otherParams)

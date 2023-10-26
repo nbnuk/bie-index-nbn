@@ -1,5 +1,4 @@
 ---
-
 grails:
     profile: web
     config:
@@ -15,17 +14,11 @@ grails:
     gorm:
         # Whether to autowire entities.
         # Disabled by default for performance reasons.
-        autowire: false
+        #  autowire: false
         reactor:
             # Whether to translate GORM events into Reactor events
             # Disabled by default for performance reasons
             events: false
-    cors:
-        enabled: true
-logging:
-    config:
-        - file:///data/bie-index/config/logback.groovy
-        #can use an environment variable: export LOGGING_CONFIG=/Users/me/config/logback.groovy
 info:
     app:
         name: '@info.app.name@'
@@ -37,12 +30,18 @@ spring:
     groovy:
         template:
             check-template-location: false
-
-# Spring Actuator Endpoints are Disabled by Default
-endpoints:
-    enabled: false
     jmx:
-        enabled: true
+        unique-names: true
+        devtools:
+            restart:
+                exclude:
+                    - grails-app/views/**
+                    - grails-app/i18n/**
+                    - grails-app/conf/**
+
+management:
+    endpoints:
+        enabled-by-default: false
 
 ---
 grails:
@@ -96,6 +95,7 @@ grails:
                 scriptlets: html
                 taglib: none
                 staticparts: none
+    serverURL: http://localhost:8080
 endpoints:
     jmx:
         unique-names: true
@@ -104,97 +104,175 @@ endpoints:
 #Required so that the gbif-ecat library does not bugger up initialisation from its internal application.properties
 app:
     dataDir: /tmp/gbif-ecat
-indexLiveBaseUrl: http://localhost:8080/solr/bie
-indexOfflineBaseUrl: http://localhost:8080/solr/bie-offline
-biocacheService:
-    baseUrl: https://biocache.ala.org.au/ws
+search:
+    highlight:
+        join: <br>
+autocomplete:
+    legacy: false
 biocache:
-    solr:
-        url: http://localhost:8080/solr/biocache
-defaultNameSourceAttribution: National Species Lists
-commonNameSourceAttribution: National Species Lists
-commonNameDefaultLanguage: en-AU
-identifierSourceAttribution: National Species Lists
-indexImages: true
-collectoryBaseUrl: https://collections.ala.org.au
-collectoryServicesUrl: https://collections.ala.org.au/ws
-layersServicesUrl: https://spatial.ala.org.au/ws
-imageThumbnailUrl: https://images.ala.org.au/image/proxyImageThumbnail?imageId=
-imageLargeUrl: https://images.ala.org.au/image/proxyImage?imageId=
-imageSmallUrl: https://images.ala.org.au/image/proxyImageThumbnailLarge?imageId=
-imageMetaDataUrl: https://images.ala.org.au/ws/image/
-synonymCheckingEnabled: true
-synonymSourceAttribution: National Species Lists
-gazetteerLayerId: 2123
-security:
-    apikey:
-        serviceUrl: 'https://auth.ala.org.au/apikey/ws/check?apikey='
-    cas:
-        appServerName: https://bie.ala.org.au/ws
-        uriFilterPattern: "/admin.*,/alaAdmin.*"
-        uriExclusionFilterPattern: "/images.*,/css.*,/js.*,.*json,/help/.*"
+    base: https://records.legacy.nbnatlas.org
+    service: https://records.legacy.nbnatlas.org/ws
+    search: /occurrences/search
+    occurrenceCount:
+        path: /occurrences/taxaCount?guids={0}&separator={1}
+        enabled: true
+        # List of filters
+        filterQuery:
+            - geospatial_kosher:true
+    image:
+        path: /occurrences/search?q=${0}+AND+multimedia:Image&pageSize=5&facet=false
+        enabled: true
+        # List of filters
+        filterQuery:
+            - geospatial_kosher:true
+collectory:
+    base: https://registry.legacy.nbnatlas.org
+    service: https://registry.legacy.nbnatlas.org/ws
+    resources: /{0}
+    # A list of uids for the national species list datasets
+    nationalSpeciesDatsets:
+    #- dr2699 - dr2700 -dr2702 -dr2704 -dr2703 -dr3118
+layers:
+    service: https://layers.legacy.nbnatlas.org/ws
+    layers: /layers
+    layer: /layer/{0}?enabledOnly=false
+    objects: /objects/csv/cl{0}
+    gazetteerId: 2123
+    temporaryFilePattern: /tmp/objects_{0}.csv.gz
+images:
+    # URL of image configuration file
+    config: /default-image-lists.json
+    base: https://images.legacy.nbnatlas.org
+    service:
+        base:
+        thumbnail: https://images.legacy.nbnatlas.org/image/proxyImageThumbnail?imageId={0}
+        large: https://images.legacy.nbnatlas.org/image/proxyImage?imageId={0}
+        small: https://images.legacy.nbnatlas.org/image/proxyImageThumbnailLarge?imageId={0}
+        metadata: https://images.legacy.nbnatlas.org/ws/image/{0}
+    index: true
 wordPress:
-    sitemapUrl: https://www.ala.org.au/sitemap.xml
-    baseUrl: https://www.ala.org.au/?page_id=
+    service:
+    sitemap:
+    index: index.xml
+    page: /?page_id={0}
+    timeout: 10000
+    validateTLS: false
+    titleSelector: head > title
+    contentSelector: body main
+    idSelector: head > meta[name=id]
+    shortLinkSelector: head > link[rel=shortlink]
+    excludedLocations:
+        - .*/category/.*
     excludedCategories:
         - button
     contentOnlyParams: ?content-only=1&categories=1
-speciesList:
-    url: https://lists.ala.org.au/ws/speciesListItems/
-    params: ?includeKVP=true
-# Acceptable vernacular names to appear in autocomplete
-#autoComplete.languages = 'en,en-AU,en-CA,en-GB,en-US'
-autoComplete:
+knowledgeBase:
+    service: https://support.ala.org.au
+    sitemap: /support/solutions
+    sectionSelector: section.article-list .list-lead > a
+    articleCssSelector: .article-title a.c-link
+lists:
+    service: https://lists.legacy.nbnatlas.org/ws
+    items: /speciesListItems/{0}?includeKVP=true&max={1}&offset={2}
+# If attribution entry is null, the default is used
+naming:
+    service: https://namematching-ws.legacy.nbnatlas.org
+attribution:
+    default: National Species Lists
+    common:
+    identifier:
+    synonym:
+commonName:
+    # Acceptable vernacular names to appear in autocomplete and primary name eg en,en-AU,en-CA,en-GB,en-US (leave empty for any language)
     languages:
+    defaultLanguage: en
+security:
+    cas:
+        enabled: false
+    oidc:
+        enabled: true
+        discoveryUri: https://auth-test.ala.org.au/cas/oidc/.well-known
+        scope: openid,profile,email,ala,roles, user_defined
+    #        allowUnsignedIdTokens: true
+    jwt:
+        enabled: true
+        discoveryUri: https://auth-test.ala.org.au/cas/oidc/.well-known
+        fallbackToLegacyBehaviour: true
+
 # Location of conservation lists
 conservationListsUrl: /default-conservation-lists.json
 # Location of vernacular name lists (null for default)
 vernacularListsUrl: /default-vernacular-lists.json
-# Location of image lists (null for default)
-imagesListsUrl: /default-image-lists.json
 # Location of locality keywords (null for default)
 localityKeywordsUrl: /default-locality-keywords.json
 #nationalSpeciesDatasets: dr2699,dr2700,dr2702,dr2704,dr2703,dr3118
-nationalSpeciesDatasets: ""
-defaultDownloadFields: guid,rank,scientificName,establishmentMeans,rk_genus,rk_family,rk_order,rk_class,rk_phylum,rk_kingdom,datasetName
+defaultDownloadFields: guid,rank,scientificName,scientificNameAuthorship,taxonomicStatus,establishmentMeans,rk_genus,rk_family,rk_order,rk_class,rk_phylum,rk_kingdom,datasetName,parentGuid,acceptedConceptName,acceptedConceptID,idxtype,name
 additionalResultFields: ""
 #toggle for the population of occurrence counts
-occurrenceCounts:
-    enabled: true
-    filterQuery: geospatial_kosher:true
 
 # Score normal value (divides integer priority by the norm to give solr boosts)
-priority:
-    norm: 4000
-    min: 0.25
-    max: 5.0
 
-# SOLR additional params
+# SOLR additional params and connections
 solr:
-    qf: scientificName^1000+commonName^500+exact_text^200+doc_name^100+text
-    bq:
-        - taxonomicStatus:accepted^2000
-        - rankID:7000^500
-        - rankID:6000^100
-        - scientificName:(*+-\"*+x+*\")^500
-        - taxonomicStatus:(*+-misapplied+-excluded+-miscellaneousLiterature+-inferredSynonym+-inferredAccepted)^1000
-        - idxtype:TAXON^2000
-    fq:
-        - NOT+idxtype:IDENTIFIER
-        - NOT+idxtype:TAXONVARIANT
-    defType: edismax
-    qAlt: text:*
-    hl:
-        - true
-        - hl=true
-        - hl.fl=*
-        - hl.simple.pre=<b>
-        - hl.simple.post=</b>
+    live:
+        type: HTTP
+        connection: http://localhost:8983/solr/bie
+        queueSize: 10
+        threadCount: 4
+        timeout: 120000
+    updatingLive:
+        type: UPDATE
+        connection: http://localhost:8983/solr/bie
+        queueSize: 10
+        threadCount: 4
+        timeout: 300000
+    offline:
+        type: UPDATE
+        connection: http://localhost:8983/solr/bie-offline
+        queueSize: 10
+        threadCount: 4
+        timeout: 300000
+    search:
+        qf:
+            - exact_text
+            - text
+            - content^0.2
+        bq:
+        fq:
+            - NOT idxtype:IDENTIFIER
+            - NOT idxtype:TAXONVARIANT
+        defType: edismax
+        qAlt: text:*
+        hl:
+            hl: true
+            fl: "*,score"
+            simple:
+                pre: <b>
+                post: </b>
+        boost: searchWeight
+    suggest:
+
 skin:
     layout: main
     orgNameLong: Atlas of Living Australia
 useLegacyAuto: false
 import:
-    sequence: collectory,taxonomy-all,vernacular,denormalise,layers,regions,localities,conservation-lists,wordpress,link-identifiers,images,occurrences
+    sequence: collectory,taxonomy-all,vernacular,denormalise,layers,regions,localities,conservation-lists,wordpress,knowledgebase,favourites,weights,link-identifiers,images,occurrences,suggest-index
     taxonomy:
         dir: /data/bie/import
+    priority:
+        norm: 4000
+        min: 0.25
+        max: 5.0
+    weightConfigUrl: /default-weights.json
+    favouritesConfigUrl: /default-favourites.json
+    vernacularName:
+        statusUrl: /default-vernacular-name-status.json
+        common: common
+        legislated: legislated
+        preferred: preferred
+        deprecated: deprecated
+
+headerAndFooter:
+    baseURL: "https://layout.legacy.nbnatlas.org/uk/commonui-bs3-v2"
+    version: "2"

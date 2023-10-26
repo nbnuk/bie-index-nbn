@@ -3,15 +3,17 @@ package uk.org.nbn.bie
 import au.com.bytecode.opencsv.CSVReader
 import au.org.ala.bie.search.IndexDocType
 import au.org.ala.bie.util.Encoder
+//import au.org.ala.bie.util.TitleCapitaliser
 import au.org.ala.vocab.ALATerm
 import grails.async.PromiseList
 import grails.converters.JSON
 import groovy.json.JsonSlurper
-import org.apache.commons.io.IOUtils
+//import org.apache.commons.io.IOUtils
 import org.apache.solr.common.params.MapSolrParams
 import org.apache.commons.lang.StringEscapeUtils
 import org.gbif.dwc.terms.DwcTerm
 import org.gbif.dwca.record.Record
+//import org.grails.web.json.JSONElement
 import org.grails.web.json.JSONObject
 
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -21,71 +23,14 @@ import java.util.zip.GZIPInputStream
 
 class ImportService extends au.org.ala.bie.ImportService{
 
-    /**
-     * Removes field values from all records in index
-     * @param fld
-     * @throws Exception
-     */
-    def clearFieldValues(String fld) throws Exception {
-        try {
-            clearFieldValues(fld, "", false)
-        } catch (Exception ex) {
-            log.warn "Error clearing occurrenceCounts: ${ex.message}", ex
-        }
-    }
-    /**
-     * Removes field values from records in index matching the provided fq
-     * @param fld
-     * @param fq
-     * @throws Exception
-     */
-    def clearFieldValues(String fld, String fq, Boolean online) throws Exception {
-        int page = 1
-        int pageSize = 1000
-        def js = new JsonSlurper()
-        def baseUrl = online ? grailsApplication.config.indexLiveBaseUrl : grailsApplication.config.indexOfflineBaseUrl
-
-        try {
-            while (true) {
-                def solrServerUrl = baseUrl + "/select?wt=json&q=*:*&fq=" + fld + ":[*+TO+*]&start=0&rows=" + pageSize //note, always start at 0 since getting rid of all values
-                if (fq != "") solrServerUrl = solrServerUrl + "&fq=" + fq
-                log.info("SOLR clear field URL: " + solrServerUrl)
-                def queryResponse = Encoder.encodeUrl(solrServerUrl).toURL().getText("UTF-8")
-                def json = js.parseText(queryResponse)
-                int total = json.response.numFound
-                def docs = json.response.docs
-                def buffer = []
-
-                if (docs.isEmpty())
-                    break
-                docs.each { doc ->
-                    def update = [:]
-                    Map<String, String> partialUpdateNull = new HashMap<String, String>();
-                    partialUpdateNull.put("set", null);
-                    update["id"] = doc.id // doc key
-                    update["idxtype"] = ["set": doc.idxtype] // required field
-                    update["guid"] = ["set": doc.guid] // required field
-                    update[fld] = partialUpdateNull
-                    buffer << update
-                }
-                if (!buffer.isEmpty()) {
-                    log.info("Committing cleared fields to SOLR: #" + page.toString() + " set of " + pageSize.toString() + " records")
-                    indexService.indexBatch(buffer, online)
-                }
-                page++
-            }
-        } catch (Exception ex) {
-            log.error("Unable to clear field " + fld + " values ", ex)
-            log("Error: " + ex.getMessage())
-        }
-    }
+    def grailsApplication
 
     def importFeaturedRegions() {
-        log ("Starting featured regions import "+grailsApplication.config.regionFeaturedLayerIds)
+        super.log "Starting featured regions import "+grailsApplication.config.regionFeaturedLayerIds
         String[] regionFeaturedIds
         if(grailsApplication.config.regionFeaturedLayerIds) {
             regionFeaturedIds = grailsApplication.config.regionFeaturedLayerIds.split(',')
-            log("Featured regions = " + regionFeaturedIds.toString())
+            super.log "Featured regions = " + regionFeaturedIds.toString()
         }
 
         def layers = getLayers()
@@ -95,46 +40,58 @@ class ImportService extends au.org.ala.bie.ImportService{
                 importFeaturedRegionLayer(layer)
             }
         }
-        log "Finished featured regions import"
+        super.log "Finished featured regions import"
     }
 
     protected getLayers() {
         def js = new JsonSlurper()
-        js.parseText(new URL(Encoder.encodeUrl(grailsApplication.config.layersServicesUrl + "/layers")).getText("UTF-8"))
+        js.parseText(new URL(Encoder.encodeUrl(grailsApplication.config.layers.service + "/layers")).getText("UTF-8"))
     }
 
     @Override
-    def importRegions() {
-        log "Starting regions import"
+    def importRegions(boolean online) {
+        super.log"Starting regions import"
         def js = new JsonSlurper()
-        def layers = js.parseText(new URL(Encoder.encodeUrl(grailsApplication.config.layersServicesUrl + "/layers")).getText("UTF-8"))
-        indexService.deleteFromIndex(IndexDocType.REGION)
+        def layers = js.parseText(new URL(Encoder.encodeUrl(grailsApplication.config.layers.service + "/layers")).getText("UTF-8"))
+        indexService.deleteFromIndex(IndexDocType.REGION, online)
         layers.each { layer ->
             if (layer.type == "Contextual"  && layer.enabled.toBoolean()) {
-                importLayer(layer)
+                importLayer(layer, online)
             }
         }
-        log"Finished indexing ${layers.size()} region layers"
-        log "Finished regions import"
+        super.log"Finished indexing ${layers.size()} region layers"
+        super.log"Finished regions import"
 
     }
 
     @Override
-    protected def importLayer(layer) {
+    protected def importLayer(layer, boolean online) {
         //there are layers that are disabled that need to be imported, layer 17 (OS gazateer layer for example (unsed in importLocalities).
         // NBN introduced disable layer only for importRegions. It doesnt seem right way to do it, but need to leave as is for now
 //        if (!layer.enabled.toBoolean()) {
 //            return false;
 //        }
 
-        super.importLayer(layer);
+        super.importLayer(layer, online);
         return true;
+    }
+
+    @Override
+    def importWordPressPages(boolean online) throws Exception {
+        super.log "Starting wordpress import"
+        if (!grailsApplication.config.wordPress.sitemap) {
+            indexService.deleteFromIndex(IndexDocType.WORDPRESS, online)
+            super.log "Finished. Nothing to import"
+            return
+        } else{
+            super.importWordPressPages(online)
+        }
     }
 
     protected def importFeaturedRegionLayer(layer) {
         if (!isFeaturedRegionLayer(layer))
             return false;
-        log("Loading featured regions from layer " + layer.name + " (" + layer.id + ")")
+        super.log"Loading featured regions from layer " + layer.name + " (" + layer.id + ")"
 
         def keywords = []
 
@@ -143,7 +100,7 @@ class ImportService extends au.org.ala.bie.ImportService{
         }
 
         def tempFilePath = "/tmp/objects_${layer.id}.csv.gz"
-        def url = grailsApplication.config.layersServicesUrl + "/objects/csv/cl" + layer.id
+        def url = grailsApplication.config.layers.service + "/objects/csv/cl" + layer.id
         def file = new File(tempFilePath).newOutputStream()
         file << new URL(Encoder.encodeUrl(url)).openStream()
         file.flush()
@@ -296,7 +253,7 @@ class ImportService extends au.org.ala.bie.ImportService{
         ]
 
         try {
-            clearFieldValues("speciesCount", "idxtype:REGIONFEATURED", online)
+            clearField("speciesCount", null, online, ["idxtype:REGIONFEATURED"])
         } catch (Exception ex) {
             log.warn "Error clearing speciesCounts: ${ex.message}", ex
         }
@@ -307,10 +264,10 @@ class ImportService extends au.org.ala.bie.ImportService{
         countMap.rows = 0
         countMap.remove("cursorMark")
         def searchCount = searchService.getCursorSearchResults(new MapSolrParams(countMap), !online) // could throw exception
-        def totalDocs = searchCount?.response?.numFound?:0
+        def totalDocs = searchCount.results.numFound
         int totalPages = (totalDocs + pageSize - 1) / pageSize
         log.debug "Featured Region - totalDocs = ${totalDocs} || totalPages = ${totalPages}"
-        log("Processing " + String.format("%,d", totalDocs) + " places (via ${paramsMap.q})...<br>")
+        super.log"Processing " + String.format("%,d", totalDocs) + " places (via ${paramsMap.q})...<br>"
         // send to browser
 
         def promiseList = new PromiseList() // for biocache queries
@@ -326,7 +283,7 @@ class ImportService extends au.org.ala.bie.ImportService{
                 MapSolrParams solrParams = new MapSolrParams(paramsMap)
                 log.debug "${page}. paramsMap = ${paramsMap}"
                 def searchResults = searchService.getCursorSearchResults(solrParams, !online) // use offline or online index to search
-                def resultsDocs = searchResults?.response?.docs?:[]
+                def resultsDocs = searchResults?.results?:[]
 
 
                 // buckets to group results into
@@ -337,7 +294,7 @@ class ImportService extends au.org.ala.bie.ImportService{
                     placesToSearchSpecies.add(doc)
                 }
                 promiseList << { searchSpeciesCountsForPlaces(resultsDocs, commitQueue) }
-                log("${page}. placesToSearchSpecies = ${placesToSearchSpecies.size()}")
+                super.log"${page}. placesToSearchSpecies = ${placesToSearchSpecies.size()}"
 
 
                 // update cursor
@@ -347,19 +304,19 @@ class ImportService extends au.org.ala.bie.ImportService{
 
             } catch (Exception ex) {
                 log.warn "Error calling BIE SOLR: ${ex.message}", ex
-                log("ERROR calling SOLR: ${ex.message}")
+                super.log"ERROR calling SOLR: ${ex.message}"
             }
         }
 
-        log("Waiting for all species searches and SOLR commits to finish (could take some time)")
+        super.log"Waiting for all species searches and SOLR commits to finish (could take some time)"
 
         //promiseList.get() // block until all promises are complete
         promiseList.onComplete { List results ->
             //executor.shutdownNow()
             isKeepIndexing = false // stop indexing thread
             executor.shutdown()
-            log("Total places found with species counts = ${results.sum()}")
-            log("waiting for indexing to finish...")
+            super.log"Total places found with species counts = ${results.sum()}"
+            super.log"waiting for indexing to finish..."
         }
     }
 
@@ -419,12 +376,12 @@ class ImportService extends au.org.ala.bie.ImportService{
         int totalPages = ((place_names.size() + batchSize - 1) / batchSize) -1
         log.debug "total = ${place_names.size()} || batchSize = ${batchSize} || totalPages = ${totalPages}"
         List docsWithRecs = [] // docs to index
-        //log("Getting occurrence data for ${docs.size()} docs")
+        //super.log"Getting occurrence data for ${docs.size()} docs"
 
         (0..totalPages).each { index ->
             int start = index * batchSize
             int end = (start + batchSize < place_names.size()) ? start + batchSize : place_names.size()
-            log "paging place biocache search - ${start} to ${end-1}"
+            super.log"paging place biocache search - ${start} to ${end-1}"
             def placeSubset = place_names.subList(start,end)
             //URIUtil.encodeWithinQuery(place).replaceAll("%26","&").replaceAll("%3D","=").replaceAll("%3A",":")
             def placeParamList = placeSubset.collect { String place -> '"' + place + '"' } // URL encode place names
@@ -463,7 +420,7 @@ class ImportService extends au.org.ala.bie.ImportService{
                 }
             } catch (Exception ex) {
                 log.warn "Error calling biocache SOLR: ${ex.message}", ex
-                log("ERROR calling biocache SOLR: ${ex.message}")
+                super.log"ERROR calling biocache SOLR: ${ex.message}"
             }
         }
 
@@ -489,12 +446,12 @@ class ImportService extends au.org.ala.bie.ImportService{
         int totalPages = ((place_names.size() + batchSize - 1) / batchSize) -1
         log.debug "total = ${place_names.size()} || batchSize = ${batchSize} || totalPages = ${totalPages}"
         List docsWithRecs = [] // docs to index
-        //log("Getting occurrence data for ${docs.size()} docs")
+        //super.log"Getting occurrence data for ${docs.size()} docs"
 
         (0..totalPages).each { index ->
             int start = index * batchSize
             int end = (start + batchSize < place_names.size()) ? start + batchSize : place_names.size()
-            log "paging place biocache search - ${start} to ${end-1}"
+            super.log"paging place biocache search - ${start} to ${end-1}"
             def placeSubset = place_names.subList(start,end)
             //URIUtil.encodeWithinQuery(place).replaceAll("%26","&").replaceAll("%3D","=").replaceAll("%3A",":")
             def placeParamList = placeSubset.collect { String place -> '"' + place + '"' } // URL encode place names
@@ -540,7 +497,7 @@ class ImportService extends au.org.ala.bie.ImportService{
                 }
             } catch (Exception ex) {
                 log.warn "Error calling biocache SOLR: ${ex.message}", ex
-                log("ERROR calling biocache SOLR: ${ex.message}")
+                super.log"ERROR calling biocache SOLR: ${ex.message}"
             }
         }
 
@@ -629,7 +586,6 @@ class ImportService extends au.org.ala.bie.ImportService{
      * @param updateDocs
      * @return
      */
-    @Override
     def indexDocInQueue(Queue updateDocs, msg, Boolean online = false) {
         int batchSize = 1000
 
@@ -651,14 +607,14 @@ class ImportService extends au.org.ala.bie.ImportService{
                 } catch (Exception ex) {
                     log.warn "Error batch indexing: ${ex.message}", ex
                     log.warn "updateDocs = ${updateDocs}"
-                    log("ERROR batch indexing: ${ex.message} <br><code>${ex.stackTrace}</code>")
+                    super.log"ERROR batch indexing: ${ex.message} <br><code>${ex.stackTrace}</code>"
                 }
             } else {
                 sleep(500)
             }
         }
 
-        log("Indexing thread is done: ${msg}")
+        super.log"Indexing thread is done: ${msg}"
     }
 
 
@@ -667,7 +623,7 @@ class ImportService extends au.org.ala.bie.ImportService{
     //work and retrieval of the method clearFieldValues obtained from the legacy fork) or reimplement using the new
     //ALA version as an example
     def importOccurrenceDataForPlaces(Boolean online = false, Boolean forRegionFeatured = true) throws Exception {
-        log("Operation not supported...")
+        super.log"Operation not supported anymore..."
         return
 //        String nationalSpeciesDatasets = grailsApplication.config.nationalSpeciesDatasets // comma separated String
 //        def pageSize = 10000
@@ -720,15 +676,15 @@ class ImportService extends au.org.ala.bie.ImportService{
 //        countMap.remove("cursorMark")
 //        def searchCount = searchService.getCursorSearchResults(new MapSolrParams(countMap), !online)
 //        // could throw exception
-//        def totalDocs = searchCount?.response?.numFound ?: 0
+//        def totalDocs = searchCount.results.numFound
 //        int totalPages = (totalDocs + pageSize - 1) / pageSize
 //        if (!forRegionFeatured) {
 //            log.debug "totalDocs = ${totalDocs} || totalPages = ${totalPages}"
-//            log("Processing " + String.format("%,d", totalDocs) + " taxa (via ${paramsMap.q})...<br>")
+//            super.log"Processing " + String.format("%,d", totalDocs) + " taxa (via ${paramsMap.q})...<br>"
 //            // send to browser
 //        } else {
 //            log.debug "Featured Region - totalDocs = ${totalDocs} || totalPages = ${totalPages}"
-//            log("Processing " + String.format("%,d", totalDocs) + " places (via ${paramsMap.q})...<br>")
+//            super.log"Processing " + String.format("%,d", totalDocs) + " places (via ${paramsMap.q})...<br>"
 //            // send to browser
 //        }
 //
@@ -766,7 +722,7 @@ class ImportService extends au.org.ala.bie.ImportService{
 //                            // search occurrence records to determine if it is located in host/hub county
 //                        }
 //                    }
-//                    log("${page}. taxaLocatedInHubCountry = ${taxaLocatedInHubCountry.size()} | taxaToSearchOccurrences = ${taxaToSearchOccurrences.size()}")
+//                    super.log"${page}. taxaLocatedInHubCountry = ${taxaLocatedInHubCountry.size()} | taxaToSearchOccurrences = ${taxaToSearchOccurrences.size()}"
 //                    // update national list without occurrence record lookup
 //                    updateTaxaWithLocationInfo(taxaLocatedInHubCountry, commitQueue)
 //                    // update the rest via occurrence search (non blocking via promiseList)
@@ -777,7 +733,7 @@ class ImportService extends au.org.ala.bie.ImportService{
 //                        placesToSearchOccurrences.add(doc) // count occurrence records
 //                    }
 //                    promiseList << { searchOccurrencesWithSampledPlace(resultsDocs, commitQueue) }
-//                    log("${page}. placesToSearchOccurrences = ${placesToSearchOccurrences.size()}")
+//                    super.log"${page}. placesToSearchOccurrences = ${placesToSearchOccurrences.size()}"
 //                }
 //
 //                // update cursor
@@ -787,11 +743,11 @@ class ImportService extends au.org.ala.bie.ImportService{
 //
 //            } catch (Exception ex) {
 //                log.warn "Error calling BIE SOLR: ${ex.message}", ex
-//                log("ERROR calling SOLR: ${ex.message}")
+//                super.log"ERROR calling SOLR: ${ex.message}"
 //            }
 //        }
 //
-//        log("Waiting for all occurrence searches and SOLR commits to finish (could take some time)")
+//        super.log"Waiting for all occurrence searches and SOLR commits to finish (could take some time)"
 //
 //        //promiseList.get() // block until all promises are complete
 //        promiseList.onComplete { List results ->
@@ -799,28 +755,291 @@ class ImportService extends au.org.ala.bie.ImportService{
 //            isKeepIndexing = false // stop indexing thread
 //            executor.shutdown()
 //            if (!forRegionFeatured) {
-//                log("Total taxa found with occurrence records = ${results.sum()}")
+//                super.log"Total taxa found with occurrence records = ${results.sum()}"
 //            } else {
-//                log("Total places found with occurrence records = ${results.sum()}")
+//                super.log"Total places found with occurrence records = ${results.sum()}"
 //            }
-//            log("waiting for indexing to finish...")
+//            super.log"waiting for indexing to finish..."
 //        }
     }
 
+
+
     /**
-     * Helper method to do a HTTP GET and return String content
-     *
-     * @param url
-     * @return
+     * Removes field values from all records in index
+     * @param fld
+     * @throws Exception
      */
-    private String getStringForUrl(String url) throws IOException {
-        String output = ""
-        def inStm = new URL(Encoder.encodeUrl(url)).openStream()
-        try {
-            output = IOUtils.toString(inStm)
-        } finally {
-            IOUtils.closeQuietly(inStm)
+//    private def clearFieldValues(String fld) throws Exception {
+//        try {
+//            clearFieldValues(fld, "", false)
+//        } catch (Exception ex) {
+//            log.warn "Error clearing occurrenceCounts: ${ex.message}", ex
+//        }
+//    }
+
+    /**
+     * Removes field values from records in index matching the provided fq
+     * @param fld
+     * @param fq
+     * @throws Exception
+     */
+//    private def clearFieldValues(String fld, String fq, Boolean online) throws Exception {
+//        int page = 1
+//        int pageSize = 1000
+//        def js = new JsonSlurper()
+//        def baseUrl = online ? grailsApplication.config.indexLiveBaseUrl : grailsApplication.config.indexOfflineBaseUrl
+//
+//        try {
+//            while (true) {
+//                def solrServerUrl = baseUrl + "/select?wt=json&q=*:*&fq=" + fld + ":[*+TO+*]&start=0&rows=" + pageSize //note, always start at 0 since getting rid of all values
+//                if (fq != "") solrServerUrl = solrServerUrl + "&fq=" + fq
+//                log.info("SOLR clear field URL: " + solrServerUrl)
+//                def queryResponse = Encoder.encodeUrl(solrServerUrl).toURL().getText("UTF-8")
+//                def json = js.parseText(queryResponse)
+//                int total = json.response.numFound
+//                def docs = json.response.docs
+//                def buffer = []
+//
+//                if (docs.isEmpty())
+//                    break
+//                docs.each { doc ->
+//                    def update = [:]
+//                    Map<String, String> partialUpdateNull = new HashMap<String, String>();
+//                    partialUpdateNull.put("set", null);
+//                    update["id"] = doc.id // doc key
+//                    update["idxtype"] = ["set": doc.idxtype] // required field
+//                    update["guid"] = ["set": doc.guid] // required field
+//                    update[fld] = partialUpdateNull
+//                    buffer << update
+//                }
+//                if (!buffer.isEmpty()) {
+//                    log.info("Committing cleared fields to SOLR: #" + page.toString() + " set of " + pageSize.toString() + " records")
+//                    indexService.indexBatch(buffer, online)
+//                }
+//                page++
+//            }
+//        } catch (Exception ex) {
+//            log.error("Unable to clear field " + fld + " values ", ex)
+//            log("Error: " + ex.getMessage())
+//        }
+//    }
+
+
+    /**
+     * Import and index species lists for:
+     * <ul>
+     *   <li> conservation status </li>
+     *   <li> sensitive ? </li>
+     *   <li> host-pest interactions ? </li>
+     * </ul>
+     * For each taxon in each list, update that taxon's SOLR doc with additional fields
+     * Sophie says this method does not work properly. Secies designations need sorting out.
+     * Meanwhile, the ALA have re-written it and that certainly isnt working either. Therefore
+     * we will stick to the old implementation for now. Hence the method below is copied from the legacy (master) branch,
+     * and so overrides the new implementation in the ALA code.
+     */
+    @Override
+    def importConservationSpeciesLists() throws Exception {
+
+        conservationListsSource.deleteFirst.each { fld ->
+            super.log("Deleting field contents for: " + fld)
+            clearField(fld, null, false)
         }
-        output
+
+        super.importConservationSpeciesLists()
     }
+
+    //BEGIN Legacy importConservationSpeciesLists
+
+//    @Override
+//    def importConservationSpeciesLists() throws Exception {
+//        def speciesListUrl = grailsApplication.config.nbn.speciesList.url
+//        def speciesListParams = grailsApplication.config.nbn.speciesList.params
+//        def defaultSourceField = conservationListsSource.defaultSourceField
+//        def lists = conservationListsSource.lists
+//        Integer listNum = 0
+//        def speciesListInfoUrl = grailsApplication.config?.nbn.speciesListInfo?.url ?: ''
+//        String speciesListName = ''
+//        def deleteFirst = grailsApplication.config.nbn.conservationListsToDeleteFirst //"listMembership_m_s,riskAssessment_m_s,riskAssessmentImpact_m_s,managementPlans_m_s,listUktag_m_s"; //TODO, read from the ConservationListsSource config conservation-lists.json
+//
+//        if (deleteFirst) {
+//            String[] delFirstFields = deleteFirst.split(',')
+//            delFirstFields.each { fld ->
+//                super.log("Deleting field contents for: " + fld)
+//                clearField(fld, null, false)
+//            }
+//        }
+//
+//        lists.each { resource ->
+//            listNum++
+//            this.updateProgressBar(lists.size(), listNum)
+//            String uid = resource.uid
+//            String solrField = resource.field ?: "conservationStatus_s"
+//            String sourceField = resource.sourceField ?: defaultSourceField
+//            String action = resource.action ?: "set"
+//            if (uid && solrField) {
+//                def url = "${speciesListUrl}${uid}${speciesListParams}"
+//                super.log("Loading list from: " + url)
+//                def urlInfo = "${speciesListInfoUrl}${uid}"
+//                try {
+//                    JSONElement json = JSON.parse(getStringForUrl(url))
+//                    if (speciesListInfoUrl) {
+//                        log.info("species list info: " + urlInfo)
+//                        JSONElement jsonInfo = JSON.parse(getStringForUrl(urlInfo))
+//                        speciesListName = jsonInfo.listName
+//                    }
+//                    //this calls the legacy method which is copied and pasted into this class. ALA reimplementation is for NBN.
+//                    updateDocsWithConservationStatus(json, sourceField, solrField, uid, action, speciesListName)
+//                } catch (Exception ex) {
+//                    def msg = "Error calling webservice: ${ex.message}"
+//                    super.log(msg)
+//                    log.warn(msg, ex) // send to user via http socket
+//                }
+//            }
+//        }
+//    }
+//
+//
+//    /**
+//     *  Update TAXON SOLR doc with conservation status info
+//     *  Legacy version called in importConservationSpeciesLists
+//     *  added_for_conservation_lists
+//     *
+//     * @param json
+//     * @param jsonFieldName
+//     * @param SolrFieldName
+//     * @return
+//     */
+//    private updateDocsWithConservationStatus(JSONElement json, String jsonFieldName, String SolrFieldName, String drUid, String action, String speciesListName) {
+//        if (json.size() > 0) {
+//            def totalDocs = json.size()
+//            def buffer = []
+//            def statusMap = vernacularNameStatus()
+//            def legistatedStatusType = statusMap.get("legislated")
+//            def unmatchedTaxaCount = 0
+//
+//            updateProgressBar2(100, 0)
+//            super.log("Updating taxa with ${SolrFieldName}")
+//            json.eachWithIndex { item, i ->
+//                log.debug "item = ${item}"
+//                def taxonDoc
+//
+//                if (item.lsid) {
+//                    taxonDoc = searchService.lookupTaxon(item.lsid, true) // TODO cache call
+//                }
+//
+//                if (!taxonDoc && item.name) {
+//                    taxonDoc = searchService.lookupTaxonByName(item.name, null,true) // TODO cache call
+//                }
+//
+//                if (taxonDoc) {
+//                    // do a SOLR doc (atomic) update
+//                    def doc = [:]
+//                    doc["id"] = taxonDoc.id // doc key
+//                    doc["idxtype"] = ["set": taxonDoc.idxtype] // required field
+//                    doc["guid"] = ["set": taxonDoc.guid] // required field
+//                    def fieldVale
+//                    if (jsonFieldName == "*") { //note membership of list itself, rather than specific list field value
+//                        if (speciesListName) {
+//                            fieldVale = speciesListName
+//                        } else {
+//                            fieldVale = drUid
+//                        }
+//                    } else {
+//                        fieldVale = item.kvpValues.find { it.key == jsonFieldName }?.get("value")
+//                    }
+//                    if (action == "set") {
+//                        doc[SolrFieldName] = ["set": fieldVale]
+//                    } else if (action == "add") {
+//                        ArrayList<String> existingVals = taxonDoc[SolrFieldName]
+//                        if (!existingVals) {
+//                            doc[SolrFieldName] = ["set": fieldVale]
+//                        } else {
+//                            if (!existingVals.contains(fieldVale)) existingVals << fieldVale
+//                            doc[SolrFieldName] = ["set": existingVals]
+//                        }
+//                    }
+//                    log.debug "adding to doc = ${doc}"
+//                    buffer << doc
+//                } else {
+//                    // No match so add it as a vernacular name
+//                    def capitaliser = TitleCapitaliser.create(grailsApplication.config.nbn.commonNameDefaultLanguage)
+//                    def doc = [:]
+//                    doc["id"] = UUID.randomUUID().toString() // doc key
+//                    doc["idxtype"] = IndexDocType.TAXON.name() // required field - should be IndexDocType.COMMON??? RR ****
+//                    doc["guid"] = "ALA_${item.name?.replaceAll("[^A-Za-z0-9]+", "_")}" // replace non alpha-numeric chars with '_' - required field
+//                    doc["datasetID"] = drUid
+//                    doc["datasetName"] = "Conservation list for ${SolrFieldName}"
+//                    doc["name"] = capitaliser.capitalise(item.name)
+//                    doc["status"] = legistatedStatusType?.status ?: "legistated"
+//                    doc["priority"] = legistatedStatusType?.priority ?: 500
+//                    // set conservationStatus facet
+//                    def fieldVale = item.kvpValues.find { it.key == jsonFieldName }?.get("value")
+//                    doc[SolrFieldName] = fieldVale
+//                    log.debug "new name doc = ${doc}"
+//                    buffer << doc
+//                    super.log("No existing taxon found for ${item.name}, so has been added as ${doc["guid"]}")
+//                }
+//
+//                if (i > 0) {
+//                    updateProgressBar2(totalDocs, i)
+//                }
+//            }
+//
+//            super.log("Committing to SOLR...")
+//            indexService.indexBatch(buffer)
+//            updateProgressBar2(100, 100)
+//            super.log("Number of taxa unmatched: ${unmatchedTaxaCount}")
+//            super.log("Import finished.")
+//        } else {
+//            super.log("JSON not an array or has no elements - exiting")
+//        }
+//    }
+//
+//    /**
+//     * Get vernacular name information
+//     * added_for_conservation_lists
+//     */
+//    def vernacularNameStatus() {
+//        URL source = this.class.getResource("/vernacularNameStatus.json")
+//        JsonSlurper slurper = new JsonSlurper()
+//        def ranks = slurper.parse(source)
+//        def idMap = [:]
+//        def iter = ranks.iterator()
+//        while (iter.hasNext()) {
+//            def entry = iter.next()
+//            idMap.put(entry.status, entry)
+//        }
+//        idMap
+//    }
+//
+//    /**
+//     * Helper method to do a HTTP GET and return String content
+//     *
+//     * @param url
+//     * @return
+//     */
+//    private String getStringForUrl(String url) throws IOException {
+//        return getStringForUrl(new URL(url))
+//    }
+//
+//    /**
+//     * Helper method to do a HTTP GET and return String content
+//     *
+//     * @param url
+//     * @return
+//     */
+//    private String getStringForUrl(URL url) throws IOException {
+//        String output = ""
+//        def inStm = url.openStream()
+//        try {
+//            output = IOUtils.toString(inStm)
+//        } finally {
+//            IOUtils.closeQuietly(inStm)
+//        }
+//        output
+//    }
+
+    //END Legacy importConservationSpeciesLists
 }

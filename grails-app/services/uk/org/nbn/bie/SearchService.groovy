@@ -2,7 +2,6 @@ package uk.org.nbn.bie
 
 import au.org.ala.bie.search.IndexDocType
 import au.org.ala.bie.util.Encoder
-import grails.transaction.Transactional
 import groovy.json.JsonSlurper
 
 
@@ -15,14 +14,14 @@ class SearchService extends au.org.ala.bie.SearchService{
      * @return
      */
     @Override
-    protected def lookupTaxonByName(String taxonName, Boolean useOfflineIndex = false){
-        def indexServerUrlPrefix = grailsApplication.config.indexLiveBaseUrl
+     def lookupTaxonByName(String taxonName, String kingdom, Boolean useOfflineIndex = false){
+        def indexServerUrlPrefix = grailsApplication.config.solr.live.connection
         if (useOfflineIndex) {
-            indexServerUrlPrefix = grailsApplication.config.indexOfflineBaseUrl
+            indexServerUrlPrefix = grailsApplication.config.solr.offline.connection
         }
         def solrServerUrl = indexServerUrlPrefix + "/select?wt=json&q=" +
                 "commonNameExact:\"" + taxonName + "\" OR scientificName:\"" + taxonName + "\" OR exact_text:\"" + taxonName + "\"" + // exact_text added to handle case differences in query vs index
-                (grailsApplication.config?.solr?.bq ? "&" + grailsApplication.config.solr.bq + "&defType=dismax" : "") //use boosting if provided, since the first match will be selected which is otherwise fairly random
+                (grailsApplication.config?.solr?.search?.bq ? "&" + grailsApplication.config.solr.search.bq + "&defType=dismax" : "") //use boosting if provided, since the first match will be selected which is otherwise fairly random
 
         def queryResponse = new URL(Encoder.encodeUrl(solrServerUrl)).getText("UTF-8")
         def js = new JsonSlurper()
@@ -39,7 +38,7 @@ class SearchService extends au.org.ala.bie.SearchService{
      */
 
     def lookupSynonyms(String taxonID, Boolean useOfflineIndex = false){
-        def indexServerUrlPrefix = useOfflineIndex ? grailsApplication.config.indexOfflineBaseUrl : grailsApplication.config.indexLiveBaseUrl
+        def indexServerUrlPrefix = useOfflineIndex ? grailsApplication.config.solr.offline.connection : grailsApplication.config.solr.live.connection
         def encID = URLEncoder.encode(taxonID, 'UTF-8')
 
         def synonymQueryUrl = indexServerUrlPrefix + "/select?wt=json&q=" +
@@ -53,15 +52,16 @@ class SearchService extends au.org.ala.bie.SearchService{
     }
 
     @Override
-    def getTaxon(taxonLookup) {
-        def model = super.getTaxon(taxonLookup)
+    def getTaxon(taxonLookup, List<Locale> locales) {
+        def model = super.getTaxon(taxonLookup, locales)
 
-        getTaxonExtra(model)
+        if (model) {
+            getTaxonExtra(model)
 
-        addOccurrenceCountsToTaxonModel(model, super.lookupTaxon(model.taxonConcept.guid))
+            addOccurrenceCountsToTaxonModel(model, super.lookupTaxon(model.taxonConcept.guid))
+        }
 
         model
-
     }
 
     /**
@@ -94,12 +94,12 @@ class SearchService extends au.org.ala.bie.SearchService{
             docStats.put("occurrenceCount", taxon["occurrenceCount"])
         }
         def jsonSlurper = new JsonSlurper()
-        def AdditionalOccStats = jsonSlurper.parseText(grailsApplication.config?.additionalOccurrenceCountsJSON ?: "[]")
-        AdditionalOccStats.each { stats ->
-            if (taxon.containsKey(stats.solrfield)) {
-                docStats.put(stats.solrfield, taxon[stats.solrfield])
-            }
-        }
+//        def AdditionalOccStats = jsonSlurper.parseText(grailsApplication.config?.additionalOccurrenceCountsJSON ?: "[]")
+//        AdditionalOccStats.each { stats ->
+//            if (taxon.containsKey(stats.solrfield)) {
+//                docStats.put(stats.solrfield, taxon[stats.solrfield])
+//            }
+//        }
 
         model.occurrenceCounts = docStats
     }
