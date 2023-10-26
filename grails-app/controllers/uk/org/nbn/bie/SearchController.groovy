@@ -104,6 +104,10 @@ class SearchController extends au.org.ala.bie.SearchController {
             params.remove("flimit")
         }
         else{
+            //The ALA do not support setting a facet limit, however NBN require it (for BBG).
+            //NBN use a convention where, if a facet limit is specified in the request, it is initially added to the
+            //list of facets, like below. Later, just before the query is sent to solr, the flimit is retrieved
+            //(and removed from the list of facets). This is done in uk.org.nbn.bie.IndexService.query
             params.facets += ",flimit:${params.flimit}"
         }
         super.search()
