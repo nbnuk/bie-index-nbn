@@ -14,8 +14,10 @@ cache:
   - "$HOME/.m2"
   - "$HOME/.gradle/caches/"
   - "$HOME/.gradle/wrapper/"
+before_install:
+  - mkdir -p ~/.gradle && echo "org.gradle.daemon=false" >> ~/.gradle/gradle.properties
 after_success:
-- '[ "${TRAVIS_PULL_REQUEST}" = "false" ] && travis_retry travis_wait ./gradlew publish'
+- '[ "${TRAVIS_PULL_REQUEST}" = "false" ] && travis_retry ./gradlew publish'
 env:
   global:
   - JAVA_TOOL_OPTIONS=-Dhttps.protocols=TLSv1.2
