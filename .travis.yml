@@ -1,4 +1,5 @@
 language: groovy
+dist: focal
 jdk:
 - openjdk11
 sudo: false
