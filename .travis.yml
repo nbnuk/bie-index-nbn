@@ -16,8 +16,8 @@ cache:
   - "$HOME/.gradle/wrapper/"
 before_install:
   - mkdir -p ~/.gradle && echo "org.gradle.daemon=false" >> ~/.gradle/gradle.properties
-script: #override the script phase so that we can add travis_wait
-  - travis_wait ./gradlew assemble # Use travis_wait here
+install:
+  - travis_wait 20 ./gradlew assemble
 after_success:
 - '[ "${TRAVIS_PULL_REQUEST}" = "false" ] && travis_retry ./gradlew publish'
 env:
