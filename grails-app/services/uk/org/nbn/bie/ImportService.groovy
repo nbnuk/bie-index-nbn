@@ -275,6 +275,8 @@ class ImportService extends au.org.ala.bie.ImportService{
         def promiseList = new PromiseList() // for biocache queries
         Queue commitQueue = new ConcurrentLinkedQueue()  // queue to put docs to be indexes
         ExecutorService executor = Executors.newSingleThreadExecutor() // consumer of queue - single blocking thread
+
+        isKeepIndexing = true
         executor.execute {
             indexDocInQueue(commitQueue, "initialised", online) // will keep polling the queue until terminated via cancel()
         }
