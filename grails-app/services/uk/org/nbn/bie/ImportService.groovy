@@ -25,6 +25,8 @@ class ImportService extends au.org.ala.bie.ImportService{
 
     def grailsApplication
 
+    def isKeepIndexing = true // so we can cancel indexing thread (single thread only so field is OK)
+
     def importFeaturedRegions() {
         super.log "Starting featured regions import "+grailsApplication.config.regionFeaturedLayerIds
         String[] regionFeaturedIds
@@ -273,6 +275,8 @@ class ImportService extends au.org.ala.bie.ImportService{
         def promiseList = new PromiseList() // for biocache queries
         Queue commitQueue = new ConcurrentLinkedQueue()  // queue to put docs to be indexes
         ExecutorService executor = Executors.newSingleThreadExecutor() // consumer of queue - single blocking thread
+
+        isKeepIndexing = true
         executor.execute {
             indexDocInQueue(commitQueue, "initialised", online) // will keep polling the queue until terminated via cancel()
         }
@@ -504,6 +508,8 @@ class ImportService extends au.org.ala.bie.ImportService{
         if (docsWithRecs.size() > 0) {
             log.debug "docsWithRecs size = ${docsWithRecs.size()} vs docs size = ${docs.size()}"
             updatePlacesWithSpeciesCount(docsWithRecs, commitQueue)
+        } else {
+            return 0;
         }
 
     }
