@@ -25,6 +25,8 @@ class ImportService extends au.org.ala.bie.ImportService{
 
     def grailsApplication
 
+    def isKeepIndexing = true // so we can cancel indexing thread (single thread only so field is OK)
+
     def importFeaturedRegions() {
         super.log "Starting featured regions import "+grailsApplication.config.regionFeaturedLayerIds
         String[] regionFeaturedIds
