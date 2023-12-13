@@ -506,6 +506,8 @@ class ImportService extends au.org.ala.bie.ImportService{
         if (docsWithRecs.size() > 0) {
             log.debug "docsWithRecs size = ${docsWithRecs.size()} vs docs size = ${docs.size()}"
             updatePlacesWithSpeciesCount(docsWithRecs, commitQueue)
+        } else {
+            return 0;
         }
 
     }
