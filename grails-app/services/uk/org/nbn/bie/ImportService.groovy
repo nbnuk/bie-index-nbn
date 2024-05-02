@@ -129,7 +129,8 @@ class ImportService extends au.org.ala.bie.ImportService{
                     for (fa in fm.(workspaceLayer.toString())[0].children()) {
                         def attrName = fa.name().localPart
                         def attrVal = fa.text()
-                        faMap.put(attrName, attrVal)
+                        //Historically these attribute names were lowercase in geoserver but since switch to shape file stores they are mixed
+                        faMap.put(attrName.toString().toLowerCase(), attrVal)
                     }
                     featuredDynamicFields.put(idValue, faMap)
                 }
