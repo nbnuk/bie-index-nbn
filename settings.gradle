@@ -1,6 +1,6 @@
 rootProject.name='bie-index-nbn'
 
-boolean inplace = true
+boolean inplace = false
 
 if (inplace) {
     include ':bie-index'

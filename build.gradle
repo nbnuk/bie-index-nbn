@@ -72,7 +72,7 @@ configurations {
 }
 
 // Set to true it needed only for development
-boolean inplace = true
+boolean inplace = false
 
 if (inplace) {
     grails {
