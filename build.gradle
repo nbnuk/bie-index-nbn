@@ -12,7 +12,7 @@ buildscript {
     }
 }
 
-version "1.8.2-NBN-0-0-11"
+version "1.8.2-NBN-0-0-12-SNAPSHOT"
 group "uk.org.nbn"
 
 apply plugin:"eclipse"
@@ -152,7 +152,9 @@ bootRun {
             '-Dspring.output.ansi.enabled=always',
             '-noverify',
             '-XX:TieredStopAtLevel=1',
-            '-Xmx1024m')
+            '-Xmx1024m'
+    )
+
     sourceResources sourceSets.main
     String springProfilesActive = 'spring.profiles.active'
     systemProperty springProfilesActive, System.getProperty(springProfilesActive)
