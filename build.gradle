@@ -152,8 +152,8 @@ bootRun {
             '-Dspring.output.ansi.enabled=always',
             '-noverify',
             '-XX:TieredStopAtLevel=1',
-            '-Xmx1024m',
-            '-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005')
+            '-Xmx1024m'
+    )
 
     sourceResources sourceSets.main
     String springProfilesActive = 'spring.profiles.active'
