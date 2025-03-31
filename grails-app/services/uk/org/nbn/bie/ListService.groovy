@@ -13,8 +13,8 @@ class ListService extends au.org.ala.bie.ListService {
      *
      * @param uid The list UID
      */
-    def getInfo(uid, max = 10000, offset = 0) {
-        def url = Encoder.buildServiceUrl(grailsApplication.config.lists.service, grailsApplication.config.lists.items, uid, max, offset)
+    def getInfo(uid) {
+        def url = Encoder.buildServiceUrl(grailsApplication.config.lists.service, grailsApplication.config.lists.info, uid)
         def slurper = new JsonSlurper()
         def json = slurper.parseText(url.getText('UTF-8'))
         return json;
