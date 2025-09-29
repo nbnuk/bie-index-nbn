@@ -474,14 +474,14 @@ class ImportService extends au.org.ala.bie.ImportService{
                         .replaceAll("%3D","=")
                         .replaceAll("%3A",":")
                         .replaceAll("'","%27")
-                url_clean = url_clean + "&wt=json&indent=true&rows=0&facet=true&facet.pivot=lsid," + clField + "&facet.mincount=1&facet.limit=-1"
+                url_clean = url_clean + "&wt=json&indent=true&rows=0&facet=true&facet.pivot=taxonConceptID," + clField + "&facet.mincount=1&facet.limit=-1"
 
                 def queryResponse = new URL(url_clean).getText("UTF-8")
                 JSONObject jsonObj = JSON.parse(queryResponse)
 
                 if (jsonObj.containsKey("facet_counts")) {
 
-                    def facetPivots = jsonObj?.facet_counts?.facet_pivot.get("lsid,"+clField)
+                    def facetPivots = jsonObj?.facet_counts?.facet_pivot.get("taxonConceptID,"+clField)
 
                     facetPivots.each { facetPivot ->
                         facetPivot.pivot.each { pivot ->
