@@ -12,7 +12,7 @@ buildscript {
     }
 }
 
-version "1.8.2-NBN-0-1-0-PIPELINES"
+version "1.8.2-NBN-0-1-1-PIPELINES"
 group "uk.org.nbn"
 
 apply plugin:"eclipse"
@@ -120,7 +120,7 @@ dependencies {
     testCompile "org.grails.plugins:geb"
 
     if(!inplace) {
-        compile "au.org.ala:bie-index:1.8.2-NBN-0-0-6"
+        compile "au.org.ala:bie-index:1.8.2-NBN-0-0-7"
     }
 
 //    compile 'org.grails.plugins:external-config:2.0.0'
