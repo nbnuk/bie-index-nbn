@@ -276,3 +276,8 @@ import:
 headerAndFooter:
     baseURL: "https://layout.legacy.nbnatlas.org/uk/commonui-bs3-v2"
     version: "2"
+
+sitemap:
+    enabled: true
+    chunkSize: 45000
+    cacheTtlMs: 21600000   # 6 hours
