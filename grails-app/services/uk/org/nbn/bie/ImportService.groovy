@@ -1,6 +1,6 @@
 package uk.org.nbn.bie
 
-import au.com.bytecode.opencsv.CSVReader
+
 import au.org.ala.bie.search.IndexDocType
 import au.org.ala.bie.util.Encoder
 //import au.org.ala.bie.util.TitleCapitaliser
@@ -19,7 +19,6 @@ import org.grails.web.json.JSONObject
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import java.util.zip.GZIPInputStream
 
 class ImportService extends au.org.ala.bie.ImportService{
 
@@ -101,13 +100,6 @@ class ImportService extends au.org.ala.bie.ImportService{
             keywords = this.getConfigFile(grailsApplication.config.localityKeywordsUrl)
         }
 
-        def tempFilePath = "/tmp/objects_${layer.id}.csv.gz"
-        def url = grailsApplication.config.layers.service + "/objects/csv/cl" + layer.id
-        def file = new File(tempFilePath).newOutputStream()
-        file << new URL(Encoder.encodeUrl(url)).openStream()
-        file.flush()
-        file.close()
-
         //START featuredRegionLayer (BBG) specific
         def featuredDynamicFields = [:]
 
@@ -143,42 +135,61 @@ class ImportService extends au.org.ala.bie.ImportService{
         }
         //END featuredRegionLayer (BBG) specific
 
-        if (new File(tempFilePath).exists() && new File(tempFilePath).length() > 0) {
+            String baseUrl = grailsApplication.config.layers.service
+            def jsonSlurper = new JsonSlurper()
+            int pageSize = 1000
 
-            def gzipInput = new GZIPInputStream(new FileInputStream(tempFilePath))
+            def fieldUrl = "${baseUrl}/field/cl${layer.id}?pageSize=0"
+            super.log("Getting object count for layer ${layer.id}: ${fieldUrl}")
 
-            //read file and index
-            def csvReader = new CSVReader(new InputStreamReader(gzipInput))
+            def fieldResponse = new URL(fieldUrl).text
+            long totalObjects = jsonSlurper.parseText(fieldResponse).number_of_objects as long
 
-            def expectedHeaders = ["pid", "id", "name", "description", "centroid", "featuretype"]
+            long totalPages = Math.ceil(totalObjects / (double) pageSize) as long
+            super.log(
+                    "Layer ${layer.id} contains ${totalObjects} objects; " +
+                            "processing ${totalPages} page(s) of up to ${pageSize} objects."
+            )
 
-            def headers = csvReader.readNext()
-            def currentLine = []
+            long offset = 0
+            long page = 1
             def batch = []
-            while ((currentLine = csvReader.readNext()) != null) {
 
-                if (currentLine.length >= expectedHeaders.size()) {
+            while (offset < totalObjects) {
+                def objectsUrl =
+                        "${baseUrl}/objects/cl${layer.id}?pageSize=${pageSize}&start=${offset}"
 
+                super.log(
+                        "Fetching page ${page}/${totalPages} for layer ${layer.id} " +
+                                "(offset ${offset}, expected up to ${Math.min(pageSize, totalObjects - offset)} objects): ${objectsUrl}"
+                )
+
+                def response = new URL(objectsUrl).text
+                def result = jsonSlurper.parseText(response)
+
+                def objects = result ?: []
+                super.log("Page ${page}/${totalPages} returned ${objects.size()} object(s).")
+
+                objects.each { obj ->
                     def doc = [:]
-                    doc["id"] = currentLine[0]
-                    doc["guid"] = currentLine[0]
+                    doc["id"] = obj["pid"]
+                    doc["guid"] = obj["pid"]
 
-                    if (currentLine[5] == "POINT") {
+                    if (obj["featuretype"] == "POINT") {
                         doc["idxtype"] = IndexDocType.LOCALITY.name()
                     } else {
                         doc["idxtype"] = IndexDocType.REGION.name()
                     }
 
-                    doc["name"] = currentLine[2]
+                    doc["name"] = obj["name"]
 
-                    if (currentLine[3] && currentLine[2] != currentLine[3]) {
-                        doc["description"] = currentLine[3]
+                    if (obj["description"] && obj["name"] != obj["description"]) {
+                        doc["description"] = obj["description"]
                     } else {
                         doc["description"] = layer.displayname
                     }
 
-                    doc["centroid"] = currentLine[4]
-
+                    doc["centroid"] = obj["centroid"]
 
                     doc["distribution"] = "N/A"
 
@@ -193,13 +204,16 @@ class ImportService extends au.org.ala.bie.ImportService{
                     //START featuredRegionLayer (BBG) specific
                     def doc2 = doc.findAll {it.key != "idxtype"}
                     doc2["idxtype"] = "REGIONFEATURED"
-                    def shp_idValue = currentLine[1]
+                    def shp_idValue = obj["name"]
+
                     if (featuredDynamicFields.containsKey(shp_idValue)) {
-                        //find shp_idfield in xml FIELDSSID (="BBG_UNIQUE" for our example)
                         def shpAttrs = featuredDynamicFields.get(shp_idValue)
                         for (attr in shpAttrs.keySet()) {
-                            //add attr key to doc2[] with value attr.value
-                            doc2[attr + '_s'] = shpAttrs.get(attr)
+                            def value = shpAttrs.get(attr)
+
+                            if (value != null && value.toString().trim()) {
+                                doc2[attr + '_s'] = value
+                            }
                         }
                         def centroid = doc['centroid']?:'' //centroid will be something like POINT(-2.24837969557765 53.5201084106602)
                         if (centroid) {
@@ -211,20 +225,28 @@ class ImportService extends au.org.ala.bie.ImportService{
                             }
                         }
                     }
+
                     batch << doc2
                     //END featuredRegionLayer (BBG) specific
 
-                    if (batch.size() > 10000) {
+                    if (batch.size() >= 10000) {
+                        super.log("Indexing batch of ${batch.size()} documents")
                         indexService.indexBatch(batch)
                         batch.clear()
                     }
                 }
+
+                offset += pageSize
+                page++
             }
             if (batch) {
+                super.log("Indexing batch of ${batch.size()} documents")
                 indexService.indexBatch(batch)
                 batch.clear()
             }
-        }
+
+            super.log("Finished paging layer ${layer.id}; processed up to ${totalObjects} object(s).")
+
         return true;
     }
 
